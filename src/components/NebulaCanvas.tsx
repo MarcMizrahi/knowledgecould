@@ -155,7 +155,7 @@ interface Interaction {
 
 // ── Graph ─────────────────────────────────────────────────────────────────────
 
-function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edges: SimEdge[] } {
+function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string> } {
   const nodes: SimNode[] = [];
   const edgeSet = new Set<string>();
   const edges: SimEdge[] = [];
@@ -298,7 +298,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     }
   }
 
-  return { nodes, edges };
+  return { nodes, edges, subtagToSuper };
 }
 
 function buildDust(w: number, h: number): Dust[] {
@@ -561,9 +561,10 @@ export default function NebulaCanvas() {
     sphereRRef.current = sR;
     // Auto-zoom out so the whole nebula stays visible
     scaleRef.current = 1 / growthFactor;
-    const { nodes, edges } = buildGraph3D(docsRef.current, sR);
+    const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
     nodesRef.current = nodes;
     edgesRef.current = edges;
+    taxonomyRef.current = { subtagToSuper: st };
     dustRef.current  = buildDust(w, h);
   }, []);
 
