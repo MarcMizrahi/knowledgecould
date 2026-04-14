@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { cn, SOURCE_ICONS } from "@/lib/utils";
 import { Send, Loader2, Bot, User, BookOpen } from "lucide-react";
-import { semanticSearch } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
 
 type Source = {
   title: string;
   source_type: string;
   source_path: string;
-  score: number;
 };
 
-type Message = {
-  role: "user" | "assistant";
-  content: string;
+type Msg = { role: "user" | "assistant"; content: string };
+
+type DisplayMessage = Msg & {
   sources?: Source[];
   loading?: boolean;
 };
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 const STARTERS = [
   "Summarize the key themes across my documents",
@@ -25,7 +26,7 @@ const STARTERS = [
 ];
 
 export default function ChatPanel() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -40,55 +41,108 @@ export default function ChatPanel() {
     setInput("");
     setBusy(true);
 
-    setMessages((prev) => [
-      ...prev,
+    const userMsg: DisplayMessage = { role: "user", content: q };
+    const assistantMsg: DisplayMessage = { role: "assistant", content: "", loading: true };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+
+    // Build conversation history for the API
+    const history: Msg[] = [
+      ...messages
+        .filter((m) => !m.loading)
+        .map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: q },
-      { role: "assistant", content: "", loading: true },
-    ]);
+    ];
 
     try {
-      // Search for relevant chunks
-      const { results } = await semanticSearch(q, 6);
-      const sources: Source[] = results.map((r) => ({
-        title: r.metadata.title,
-        source_type: r.metadata.source_type,
-        source_path: r.metadata.source_path,
-        score: r.score,
-      }));
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ messages: history }),
+      });
 
-      // Build a simple response from search results
-      let responseText: string;
-      if (results.length === 0) {
-        responseText = "I couldn't find any relevant knowledge in your nebula. Try uploading some documents first, then ask me again!";
-      } else {
-        const context = results.map((r) => r.text).join("\n\n---\n\n");
-        responseText = `Based on your knowledge base, here's what I found:\n\n${context}\n\n*Note: Full AI-powered RAG chat requires an AI API key to be configured. Currently showing relevant document excerpts.*`;
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(errData.error || `Error ${resp.status}`);
       }
 
+      if (!resp.body) throw new Error("No response stream");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+      let assistantSoFar = "";
+      let sources: Source[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+
+            // Check for our custom sources event
+            if (parsed.sources) {
+              sources = parsed.sources;
+              continue;
+            }
+
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantSoFar += content;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  content: assistantSoFar,
+                  sources,
+                  loading: false,
+                };
+                return updated;
+              });
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Final update
       setMessages((prev) => {
         const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === "assistant") {
-          updated[updated.length - 1] = {
-            ...last,
-            content: responseText,
-            sources,
-            loading: false,
-          };
-        }
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: assistantSoFar || "I couldn't generate a response. Please try again.",
+          sources,
+          loading: false,
+        };
         return updated;
       });
-    } catch {
+    } catch (err: any) {
       setMessages((prev) => {
         const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === "assistant") {
-          updated[updated.length - 1] = {
-            ...last,
-            content: "Something went wrong. Please try again.",
-            loading: false,
-          };
-        }
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: err?.message || "Something went wrong. Please try again.",
+          loading: false,
+        };
         return updated;
       });
     } finally {
@@ -166,12 +220,16 @@ export default function ChatPanel() {
                 >
                   {msg.loading ? (
                     <Loader2 size={14} className="animate-spin text-primary" />
+                  ) : msg.role === "assistant" ? (
+                    <div className="prose prose-sm prose-invert max-w-none">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
                   ) : (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   )}
                 </div>
 
-                {msg.sources && msg.sources.length > 0 && (
+                {msg.sources && msg.sources.length > 0 && !msg.loading && (
                   <div className="space-y-1">
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <BookOpen size={11} />
@@ -185,9 +243,6 @@ export default function ChatPanel() {
                         >
                           <span>{SOURCE_ICONS[src.source_type] ?? "📄"}</span>
                           <span className="max-w-32 truncate">{src.title}</span>
-                          <span className="text-primary">
-                            {(src.score * 100).toFixed(0)}%
-                          </span>
                         </div>
                       ))}
                     </div>
