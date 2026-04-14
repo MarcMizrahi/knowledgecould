@@ -208,6 +208,7 @@ function paint3D(
   dust: Dust[],
   hoverId: string | null,
   selectId: string | null,
+  linkedIds: Set<string>,
   rot: Mat3,
   sR: number,
   userScale: number,
@@ -236,6 +237,7 @@ function paint3D(
     sx: number; sy: number; sz: number;
     depth: number;
     active: boolean;
+    linked: boolean;
   };
 
   const proj: Projected[] = nodes.map(n => {
@@ -248,6 +250,7 @@ function paint3D(
       sz: rz,
       depth,
       active: n.id === hoverId || n.id === selectId,
+      linked: linkedIds.has(n.id),
     };
   });
 
@@ -271,7 +274,7 @@ function paint3D(
     ctx.stroke();
   }
 
-  for (const { n, sx, sy, depth, active } of proj) {
+  for (const { n, sx, sy, depth, active, linked } of proj) {
     const [r, g, b] = n.color;
     const sz  = 0.35 + 0.65 * depth;
     const opa = 0.25 + 0.75 * depth;
@@ -304,12 +307,13 @@ function paint3D(
       ctx.stroke();
     }
 
-    if (n.type === "tag" || active) {
+    if (n.type === "tag" || active || linked) {
       const txt = n.label.length > 24 ? n.label.slice(0, 22) + "…" : n.label;
-      const fs  = n.type === "tag" ? 11 : 10;
+      const fs  = n.type === "tag" ? 11 : linked ? 10 : 10;
       ctx.font      = n.type === "tag" ? `bold ${fs}px system-ui,sans-serif` : `${fs}px system-ui,sans-serif`;
       ctx.textAlign = "center";
-      ctx.fillStyle = `rgba(${r},${g},${b},${(active ? 1 : 0.8) * opa})`;
+      const labelOpa = active ? 1 : linked ? 0.9 : 0.8;
+      ctx.fillStyle = `rgba(${r},${g},${b},${labelOpa * opa})`;
       ctx.fillText(txt, sx, sy + rad + 13);
     }
   }
@@ -414,9 +418,19 @@ export default function NebulaCanvas() {
       av.rx *= 0.94;
 
       step3D(nodesRef.current, edgesRef.current, sphereRRef.current);
+      // Compute linked node IDs for the selected node
+      const linked = new Set<string>();
+      const sel = selectRef.current;
+      if (sel) {
+        for (const e of edgesRef.current) {
+          if (e.source === sel) linked.add(e.target);
+          else if (e.target === sel) linked.add(e.source);
+        }
+      }
+
       paint3D(
         ctx, nodesRef.current, edgesRef.current, dustRef.current,
-        hoverRef.current, selectRef.current,
+        hoverRef.current, selectRef.current, linked,
         rotRef.current, sphereRRef.current, scaleRef.current, t / 1000,
       );
       rafRef.current = requestAnimationFrame(loop);
