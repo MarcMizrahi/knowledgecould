@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import KnowledgeList from "@/components/KnowledgeList";
+import NebulaCanvas from "@/components/NebulaCanvas";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -13,8 +13,8 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <div className="nebula-bg min-h-screen">
-      <KnowledgeList />
+    <div className="nebula-bg h-screen">
+      <NebulaCanvas />
     </div>
   );
 }
