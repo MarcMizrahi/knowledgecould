@@ -171,7 +171,6 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   // 1. Auto-derive the topic hierarchy from tag co-occurrence
   const { supertagNames, subtagToSuper, orphanTags } = deriveTaxonomy(docs);
-  }
 
   const nodeIds = new Map<string, string>(); // tag/supertag name → node id
 
