@@ -152,7 +152,7 @@ function buildDust(w: number, h: number): Dust[] {
 
 // ── Physics (3-D) ─────────────────────────────────────────────────────────────
 
-function step3D(nodes: SimNode[], edges: SimEdge[], sR: number) {
+function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
   const map = new Map(nodes.map(n => [n.id, n]));
   nodes.forEach(n => { n.ax = 0; n.ay = 0; n.az = 0; });
 
@@ -190,7 +190,7 @@ function step3D(nodes: SimNode[], edges: SimEdge[], sR: number) {
     n.vz = (n.vz + n.az) * 0.97;
     const spd = Math.hypot(n.vx, n.vy, n.vz);
     if (spd > 1.0) { n.vx /= spd; n.vy /= spd; n.vz /= spd; }
-    n.wx += n.vx; n.wy += n.vy; n.wz += n.vz;
+    n.wx += n.vx * damp; n.wy += n.vy * damp; n.wz += n.vz * damp;
     const r = Math.hypot(n.wx, n.wy, n.wz);
     if (r > sR * 1.35) {
       const f = (r - sR * 1.35) * 0.04 / r;
@@ -334,6 +334,8 @@ export default function NebulaCanvas() {
   const scaleRef    = useRef(1);
   const sphereRRef  = useRef(300);
   const interactRef = useRef<Interaction>({ active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false });
+  const holdingTagRef = useRef(false);
+  const dampRef     = useRef(1); // 1 = full speed, 0 = stopped
   const rafRef      = useRef<number>(0);
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
@@ -411,13 +413,21 @@ export default function NebulaCanvas() {
     window.addEventListener("resize", resize);
 
     const loop = (t: number) => {
+      // Dampen when holding a tag node
+      if (holdingTagRef.current) {
+        dampRef.current = Math.max(0, dampRef.current - 0.02);
+      } else {
+        dampRef.current = Math.min(1, dampRef.current + 0.03);
+      }
+      const damp = dampRef.current;
+
       const av = angVelRef.current;
-      rotRef.current = mul3(rotY(av.ry), rotRef.current);
-      rotRef.current = mul3(rotX(av.rx), rotRef.current);
+      rotRef.current = mul3(rotY(av.ry * damp), rotRef.current);
+      rotRef.current = mul3(rotX(av.rx * damp), rotRef.current);
       av.ry = av.ry * 0.96 + 0.0006 * (1 - Math.abs(av.ry) * 50);
       av.rx *= 0.94;
 
-      step3D(nodesRef.current, edgesRef.current, sphereRRef.current);
+      step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
       // Compute linked node IDs for the selected node
       const linked = new Set<string>();
       const sel = selectRef.current;
@@ -457,6 +467,7 @@ export default function NebulaCanvas() {
     const mx     = e.clientX - rect.left, my = e.clientY - rect.top;
     const node   = nodeAtScreen(mx, my);
     hoverRef.current = node?.id ?? null;
+    holdingTagRef.current = node?.type === "tag";
     interactRef.current = { active: true, nodeId: node?.id ?? null, lastMx: mx, lastMy: my, hasMoved: false };
     canvasRef.current!.style.cursor = node ? "pointer" : "grabbing";
   }, [nodeAtScreen]);
@@ -484,6 +495,7 @@ export default function NebulaCanvas() {
   }, [nodeAtScreen]);
 
   const onPointerUp = useCallback(() => {
+    holdingTagRef.current = false;
     const ix = interactRef.current;
     if (!ix.hasMoved && ix.nodeId) {
       const id    = ix.nodeId;
