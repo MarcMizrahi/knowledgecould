@@ -217,54 +217,30 @@ export async function ingestURL(
   };
 }
 
-// ── Search (text-based for now, semantic search via edge function later) ──
+// ── Semantic Search (via edge function + embeddings) ──
 
 export async function semanticSearch(
   query: string,
   nResults = 8,
   docId?: string
 ): Promise<{ query: string; results: SearchHit[] }> {
-  // Basic text search using ilike on chunks
-  let q = supabase
-    .from("chunks")
-    .select("id, doc_id, chunk_index, content")
-    .ilike("content", `%${query}%`)
-    .limit(nResults);
+  const { data, error } = await supabase.functions.invoke("search", {
+    body: { query, n_results: nResults, doc_id: docId },
+  });
 
-  if (docId) {
-    q = q.eq("doc_id", docId);
+  if (error) throw new Error(error.message || "Search failed");
+  return data as { query: string; results: SearchHit[] };
+}
+
+// ── Embed document chunks (call after ingestion) ──
+
+export async function embedDocument(docId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke("embed", {
+    body: { doc_id: docId },
+  });
+  if (error) {
+    console.error("Embedding failed:", error.message);
   }
-
-  const { data: chunks, error } = await q;
-  if (error) throw new Error(error.message);
-
-  // Get doc metadata for matched chunks
-  const docIds = [...new Set(chunks?.map((c) => c.doc_id) || [])];
-  const { data: docs } = await supabase
-    .from("documents")
-    .select("id, title, source_type, source_path, tags")
-    .in("id", docIds);
-
-  const docMap = new Map(docs?.map((d) => [d.id, d]) || []);
-
-  return {
-    query,
-    results: (chunks || []).map((c) => {
-      const doc = docMap.get(c.doc_id);
-      return {
-        text: c.content,
-        metadata: {
-          doc_id: c.doc_id,
-          title: doc?.title || "Unknown",
-          source_type: doc?.source_type || "text",
-          source_path: doc?.source_path || "",
-          chunk_index: c.chunk_index,
-          tags: (doc?.tags || []).join(","),
-        },
-        score: 0.8, // placeholder score for text search
-      };
-    }),
-  };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
