@@ -93,63 +93,163 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     edges.push({ source: a, target: b, restLength: rest, strong });
   };
 
-  const tagIds = new Map<string, string>();
-  const tagArr = [...new Set(docs.flatMap(d => d.tags))];
-  const phi_g  = Math.PI * (3 - Math.sqrt(5));
-  tagArr.forEach((tag, i) => {
-    const t   = i / Math.max(tagArr.length, 1);
-    const y   = 1 - t * 2;
-    const r   = Math.sqrt(Math.max(0, 1 - y * y));
-    const ang = phi_g * i;
-    const rad = sR * 0.45;
-    const id  = `tag:${tag}`;
-    tagIds.set(tag, id);
-    nodes.push({
-      id, type: "tag", label: tag,
-      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
-      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 8, color: TAG_COLOR,
-    });
-  });
+  const phi_g = Math.PI * (3 - Math.sqrt(5));
 
-  const N = Math.max(docs.length, 1);
-  docs.forEach((doc, i) => {
-    const color  = DOC_COLOR;
-    const t      = i / N;
-    const y      = 1 - t * 2;
-    const r      = Math.sqrt(Math.max(0, 1 - y * y));
-    const ang    = phi_g * i;
-    const rad    = sR * (0.75 + Math.random() * 0.3);
-    const id     = `doc:${doc.id}`;
-    nodes.push({
-      id, type: "doc", label: doc.title,
-      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
-      vx: (Math.random()-.5)*.3, vy: (Math.random()-.5)*.3, vz: (Math.random()-.5)*.3,
-      ax: 0, ay: 0, az: 0,
-      radius: 5 + Math.min(doc.chunk_count / 10, 5),
-      color, doc,
-    });
-    doc.tags.forEach(t2 => {
-      const tid = tagIds.get(t2);
-      if (tid) addEdge(id, tid, sR * 0.55, true);
-    });
-  });
+  // 1. Collect all tags and classify them
+  const allTags = [...new Set(docs.flatMap(d => d.tags))];
+  const supertagNames = new Set<string>();
+  const subtagToSuper = new Map<string, string>();
+  const orphanTags = new Set<string>(); // tags that are neither super nor sub
 
-  for (let i = 0; i < docs.length; i++) {
-    for (let j = i + 1; j < docs.length; j++) {
-      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
-        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.65, false);
+  for (const tag of allTags) {
+    const tagLower = tag.toLowerCase();
+    // Is this tag a known supertag name?
+    if (TAXONOMY[tagLower] || TAXONOMY[tag]) {
+      supertagNames.add(tag);
+    }
+    // Is this tag a known child?
+    else if (CHILD_TO_PARENT.has(tagLower)) {
+      subtagToSuper.set(tag, CHILD_TO_PARENT.get(tagLower)!);
+      supertagNames.add(CHILD_TO_PARENT.get(tagLower)!);
+    }
+    else {
+      orphanTags.add(tag);
     }
   }
 
-  const K = Math.min(3, nodes.length - 1);
-  for (let i = 0; i < nodes.length; i++) {
-    nodes
-      .map((n, j) => ({ j, d: Math.hypot(n.wx-nodes[i].wx, n.wy-nodes[i].wy, n.wz-nodes[i].wz) }))
-      .filter(x => x.j !== i)
-      .sort((a, b) => a.d - b.d)
-      .slice(0, K)
-      .forEach(({ j }) => addEdge(nodes[i].id, nodes[j].id, sR * 0.6, false));
+  // Promote orphan tags that have enough docs to be their own supertag
+  // Otherwise they become standalone tags (level 1)
+  const tagDocCount = new Map<string, number>();
+  for (const doc of docs) {
+    for (const tag of doc.tags) {
+      tagDocCount.set(tag, (tagDocCount.get(tag) || 0) + 1);
+    }
+  }
+
+  const nodeIds = new Map<string, string>(); // tag/supertag name → node id
+
+  // 2. Create supertag nodes (level 0) — large gold spheres
+  const superArr = [...supertagNames];
+  superArr.forEach((st, i) => {
+    const t = i / Math.max(superArr.length, 1);
+    const y = 1 - t * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const ang = phi_g * i;
+    const rad = sR * 0.35;
+    const id = `supertag:${st}`;
+    nodeIds.set(st, id);
+    nodes.push({
+      id, type: "supertag", label: st, level: 0,
+      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 12, color: SUPERTAG_COLOR,
+    });
+  });
+
+  // Connect supertags to each other weakly (spread them apart)
+  for (let i = 0; i < superArr.length; i++) {
+    for (let j = i + 1; j < superArr.length; j++) {
+      addEdge(nodeIds.get(superArr[i])!, nodeIds.get(superArr[j])!, sR * 0.9, false);
+    }
+  }
+
+  // 3. Create sub-tag nodes (level 1) — medium gold, positioned near parent
+  const allSubtags = [...subtagToSuper.entries()];
+  // Also add orphan tags as level-1 nodes
+  const orphanArr = [...orphanTags];
+
+  allSubtags.forEach(([tag, parentName], i) => {
+    const parentId = nodeIds.get(parentName);
+    const parentNode = parentId ? nodes.find(n => n.id === parentId) : null;
+    const offset = phi_g * i;
+    const spread = sR * 0.2;
+    const px = parentNode ? parentNode.wx : 0;
+    const py = parentNode ? parentNode.wy : 0;
+    const pz = parentNode ? parentNode.wz : 0;
+
+    const id = `tag:${tag}`;
+    nodeIds.set(tag, id);
+    nodes.push({
+      id, type: "tag", label: tag, level: 1,
+      wx: px + Math.cos(offset) * spread,
+      wy: py + Math.sin(offset * 0.7) * spread * 0.5,
+      wz: pz + Math.sin(offset) * spread,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 7, color: TAG_COLOR,
+    });
+
+    // Strong edge to parent supertag
+    if (parentId) addEdge(id, parentId, sR * 0.25, true);
+  });
+
+  orphanArr.forEach((tag, i) => {
+    const t = i / Math.max(orphanArr.length, 1);
+    const y = 1 - t * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const ang = phi_g * (i + allSubtags.length);
+    const rad = sR * 0.5;
+
+    const id = `tag:${tag}`;
+    nodeIds.set(tag, id);
+    nodes.push({
+      id, type: "tag", label: tag, level: 1,
+      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 7, color: TAG_COLOR,
+    });
+  });
+
+  // 4. Create document nodes (level 2) — small blue, near their most specific tag
+  const N = Math.max(docs.length, 1);
+  docs.forEach((doc, i) => {
+    // Find the most specific tag this doc has (prefer subtag over supertag)
+    let bestTagId: string | null = null;
+    let bestNode: SimNode | null = null;
+    for (const tag of doc.tags) {
+      const tid = nodeIds.get(tag);
+      if (!tid) continue;
+      const tnode = nodes.find(n => n.id === tid);
+      if (!tnode) continue;
+      // Prefer subtags (level 1 with parent) over supertags
+      if (!bestNode || (tnode.type === "tag" && bestNode.type === "supertag")) {
+        bestTagId = tid;
+        bestNode = tnode;
+      }
+    }
+
+    const offset = phi_g * i;
+    const spread = sR * 0.18;
+    const px = bestNode ? bestNode.wx : 0;
+    const py = bestNode ? bestNode.wy : 0;
+    const pz = bestNode ? bestNode.wz : 0;
+
+    const id = `doc:${doc.id}`;
+    nodes.push({
+      id, type: "doc", label: doc.title, level: 2,
+      wx: px + Math.cos(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
+      wy: py + Math.sin(offset * 1.3) * spread * 0.4,
+      wz: pz + Math.sin(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      vz: (Math.random() - 0.5) * 0.3,
+      ax: 0, ay: 0, az: 0,
+      radius: 4 + Math.min(doc.chunk_count / 10, 4),
+      color: DOC_COLOR, doc,
+    });
+
+    // Connect doc to all its tags
+    for (const tag of doc.tags) {
+      const tid = nodeIds.get(tag);
+      if (tid) addEdge(id, tid, sR * 0.22, true);
+    }
+  });
+
+  // 5. Light cross-links between docs sharing tags (but fewer to avoid clutter)
+  for (let i = 0; i < docs.length; i++) {
+    for (let j = i + 1; j < Math.min(docs.length, i + 30); j++) {
+      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
+        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.35, false);
+    }
   }
 
   return { nodes, edges };
