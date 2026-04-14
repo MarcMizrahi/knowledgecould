@@ -206,7 +206,7 @@ export default function ChatPanel() {
               )}
               <div
                 className={cn(
-                  "max-w-[80%] space-y-2",
+                  "max-w-[90%] sm:max-w-[80%] space-y-2",
                   msg.role === "user" ? "items-end" : "items-start"
                 )}
               >
