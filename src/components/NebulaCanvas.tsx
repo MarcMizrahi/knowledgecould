@@ -12,23 +12,97 @@ const SUPERTAG_COLOR: [number, number, number] = [255, 200, 40]; // bright gold 
 const TAG_COLOR: [number, number, number] = [251, 191, 36];       // gold for sub-topics
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
 
-// ── Topic hierarchy ──────────────────────────────────────────────────────────
-// Super-tags are large conceptual domains; sub-tags orbit within them.
-const TAXONOMY: Record<string, string[]> = {
-  "philosophy":      ["ethics", "epistemology", "aesthetics", "religion", "mythology"],
-  "science":         ["biology", "physics", "mathematics", "space", "plants"],
-  "technology":      ["AI", "ai", "deep-learning", "neural-networks", "computer-science", "computer-architecture"],
-  "arts":            ["art", "photography", "cinema", "music", "architecture"],
-  "literature":      ["french-literature", "poetry", "linguistics"],
-  "social sciences": ["sociology", "psychology", "economics", "politics", "history", "education", "law", "journalism", "crime"],
-};
+// ── Auto-derived topic hierarchy ──────────────────────────────────────────────
+// Derives parent-child relationships from tag co-occurrence in documents.
+// A tag becomes a "supertag" if it has many docs. A smaller tag becomes its
+// child if most of its docs also carry the larger tag (high co-occurrence ratio).
 
-// Build reverse lookup: child → parent
-const CHILD_TO_PARENT = new Map<string, string>();
-for (const [parent, children] of Object.entries(TAXONOMY)) {
-  for (const child of children) {
-    CHILD_TO_PARENT.set(child.toLowerCase(), parent);
+function deriveTaxonomy(docs: KnowledgeDoc[]): {
+  supertagNames: Set<string>;
+  subtagToSuper: Map<string, string>;
+  orphanTags: Set<string>;
+} {
+  // Count docs per tag
+  const tagDocs = new Map<string, Set<string>>();
+  for (const doc of docs) {
+    for (const tag of doc.tags) {
+      if (!tagDocs.has(tag)) tagDocs.set(tag, new Set());
+      tagDocs.get(tag)!.add(doc.id);
+    }
   }
+
+  const allTags = [...tagDocs.keys()];
+  if (allTags.length === 0) return { supertagNames: new Set(), subtagToSuper: new Map(), orphanTags: new Set() };
+
+  // Sort tags by doc count descending — bigger tags are potential parents
+  const sorted = allTags.sort((a, b) => (tagDocs.get(b)?.size || 0) - (tagDocs.get(a)?.size || 0));
+
+  // Minimum docs to be a supertag: at least 5 docs, or top 20% of tags
+  const superThreshold = Math.max(5, Math.floor(docs.length * 0.03));
+  const supertagNames = new Set<string>();
+  const subtagToSuper = new Map<string, string>();
+  const claimed = new Set<string>();
+
+  // Pass 1: identify supertags (tags with enough docs)
+  for (const tag of sorted) {
+    const count = tagDocs.get(tag)?.size || 0;
+    if (count >= superThreshold) {
+      supertagNames.add(tag);
+    }
+  }
+
+  // If no supertags found, promote the top N tags
+  if (supertagNames.size === 0) {
+    const topN = Math.min(Math.max(2, Math.ceil(allTags.length * 0.2)), 8);
+    for (let i = 0; i < Math.min(topN, sorted.length); i++) {
+      supertagNames.add(sorted[i]);
+    }
+  }
+
+  // Pass 2: for each non-supertag, find the best parent supertag
+  // via co-occurrence ratio: what fraction of this tag's docs also have the parent?
+  for (const tag of sorted) {
+    if (supertagNames.has(tag) || claimed.has(tag)) continue;
+    const myDocs = tagDocs.get(tag);
+    if (!myDocs || myDocs.size === 0) continue;
+
+    let bestParent: string | null = null;
+    let bestRatio = 0;
+
+    for (const parent of supertagNames) {
+      if (parent === tag) continue;
+      const parentDocs = tagDocs.get(parent);
+      if (!parentDocs) continue;
+
+      // Count how many of my docs also belong to this parent
+      let overlap = 0;
+      for (const docId of myDocs) {
+        if (parentDocs.has(docId)) overlap++;
+      }
+      const ratio = overlap / myDocs.size;
+
+      // Need at least 30% co-occurrence to be considered a child
+      if (ratio > bestRatio && ratio >= 0.3) {
+        bestRatio = ratio;
+        bestParent = parent;
+      }
+    }
+
+    if (bestParent) {
+      subtagToSuper.set(tag, bestParent);
+      claimed.add(tag);
+    }
+  }
+
+  // Remaining tags that aren't supertags and have no parent
+  const orphanTags = new Set<string>();
+  for (const tag of allTags) {
+    if (!supertagNames.has(tag) && !subtagToSuper.has(tag)) {
+      orphanTags.add(tag);
+    }
+  }
+
+  return { supertagNames, subtagToSuper, orphanTags };
 }
 
 // ── 3-D maths ─────────────────────────────────────────────────────────────────
