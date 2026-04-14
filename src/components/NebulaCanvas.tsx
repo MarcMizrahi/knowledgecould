@@ -732,9 +732,17 @@ export default function NebulaCanvas() {
                   {" · "}{selectedNode.doc.chunk_count} chunks
                 </p>
               )}
+              {selectedNode.type === "supertag" && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Domain · {docs.filter(d => d.tags.some(t => {
+                    const parent = CHILD_TO_PARENT.get(t.toLowerCase());
+                    return t === selectedNode.label || parent === selectedNode.label;
+                  })).length} documents
+                </p>
+              )}
               {selectedNode.type === "tag" && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Tag · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
+                  Topic · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
                 </p>
               )}
             </div>
