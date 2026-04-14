@@ -413,13 +413,21 @@ export default function NebulaCanvas() {
     window.addEventListener("resize", resize);
 
     const loop = (t: number) => {
+      // Dampen when holding a tag node
+      if (holdingTagRef.current) {
+        dampRef.current = Math.max(0, dampRef.current - 0.02);
+      } else {
+        dampRef.current = Math.min(1, dampRef.current + 0.03);
+      }
+      const damp = dampRef.current;
+
       const av = angVelRef.current;
-      rotRef.current = mul3(rotY(av.ry), rotRef.current);
-      rotRef.current = mul3(rotX(av.rx), rotRef.current);
+      rotRef.current = mul3(rotY(av.ry * damp), rotRef.current);
+      rotRef.current = mul3(rotX(av.rx * damp), rotRef.current);
       av.ry = av.ry * 0.96 + 0.0006 * (1 - Math.abs(av.ry) * 50);
       av.rx *= 0.94;
 
-      step3D(nodesRef.current, edgesRef.current, sphereRRef.current);
+      step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
       // Compute linked node IDs for the selected node
       const linked = new Set<string>();
       const sel = selectRef.current;
