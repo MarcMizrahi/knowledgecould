@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { listDocuments, deleteDocument, type KnowledgeDoc } from "@/lib/api";
 import { SOURCE_ICONS, formatDate } from "@/lib/utils";
-import { X, MessageCircle, Search, Trash2, Plus, RefreshCw } from "lucide-react";
+import { X, MessageCircle, Search, Trash2, Plus, RefreshCw, ArrowLeft } from "lucide-react";
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
@@ -373,12 +373,14 @@ function paint3D(
   rot: Mat3,
   sR: number,
   userScale: number,
+  panX: number,
+  panY: number,
   t: number,
 ) {
   const dpr = window.devicePixelRatio || 1;
   const w   = ctx.canvas.width / dpr;
   const h   = ctx.canvas.height / dpr;
-  const cx  = w / 2, cy = h / 2;
+  const cx  = w / 2 + panX, cy = h / 2 + panY;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -515,17 +517,23 @@ export default function NebulaCanvas() {
   const rotRef      = useRef<Mat3>([...MAT3_ID] as Mat3);
   const angVelRef   = useRef({ rx: 0, ry: 0.0006 });
   const scaleRef    = useRef(1);
+  const baseScaleRef = useRef(1); // the "overview" scale from rebuild
+  const panRef      = useRef({ x: 0, y: 0 });
   const sphereRRef  = useRef(300);
   const interactRef = useRef<Interaction>({ active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false });
   const holdingTagRef = useRef(false);
   const taxonomyRef  = useRef<{ subtagToSuper: Map<string, string> }>({ subtagToSuper: new Map() });
-  const dampRef     = useRef(1); // 1 = full speed, 0 = stopped
+  const dampRef     = useRef(1);
   const rafRef      = useRef<number>(0);
+  // Zoom-to-cluster animation target
+  const zoomTargetRef = useRef<{ scale: number; panX: number; panY: number } | null>(null);
+  const zoomedClusterRef = useRef<string | null>(null); // supertag label currently zoomed into
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
   const [docs, setDocs]       = useState<KnowledgeDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [zoomed, setZoomed]   = useState(false); // true when zoomed into a cluster
 
   docsRef.current = docs;
 
@@ -561,6 +569,7 @@ export default function NebulaCanvas() {
     sphereRRef.current = sR;
     // Auto-zoom out so the whole nebula stays visible
     scaleRef.current = 1 / growthFactor;
+    baseScaleRef.current = 1 / growthFactor;
     const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
     nodesRef.current = nodes;
     edgesRef.current = edges;
@@ -616,6 +625,16 @@ export default function NebulaCanvas() {
       av.rx *= 0.94;
 
       step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+
+      // Animate camera toward zoom target
+      const zt = zoomTargetRef.current;
+      if (zt) {
+        const lerp = 0.07;
+        scaleRef.current += (zt.scale - scaleRef.current) * lerp;
+        panRef.current.x += (zt.panX - panRef.current.x) * lerp;
+        panRef.current.y += (zt.panY - panRef.current.y) * lerp;
+      }
+
       // Compute linked node IDs for the selected node
       const linked = new Set<string>();
       const sel = selectRef.current;
@@ -629,7 +648,9 @@ export default function NebulaCanvas() {
       paint3D(
         ctx, nodesRef.current, edgesRef.current, dustRef.current,
         hoverRef.current, selectRef.current, linked,
-        rotRef.current, sphereRRef.current, scaleRef.current, t / 1000,
+        rotRef.current, sphereRRef.current, scaleRef.current,
+        panRef.current.x, panRef.current.y,
+        t / 1000,
       );
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -682,18 +703,87 @@ export default function NebulaCanvas() {
     ix.lastMx = mx; ix.lastMy = my;
   }, [nodeAtScreen]);
 
+  const zoomToCluster = useCallback((supertagNode: SimNode) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
+
+    // Find all nodes in this cluster (the supertag + its subtags + their docs)
+    const label = supertagNode.label;
+    const clusterNodes = nodesRef.current.filter(n => {
+      if (n.id === supertagNode.id) return true;
+      if (n.type === "tag" && taxonomyRef.current.subtagToSuper.get(n.label) === label) return true;
+      if (n.type === "doc" && n.doc?.tags.some(t => t === label || taxonomyRef.current.subtagToSuper.get(t) === label)) return true;
+      return false;
+    });
+    if (clusterNodes.length === 0) return;
+
+    // Compute projected center of the cluster
+    let sumX = 0, sumY = 0;
+    for (const n of clusterNodes) {
+      const [rx, ry] = applyMat3(rotRef.current, n.wx, n.wy, n.wz);
+      sumX += rx; sumY += ry;
+    }
+    const avgX = sumX / clusterNodes.length;
+    const avgY = sumY / clusterNodes.length;
+
+    // Compute cluster radius to determine zoom level
+    let maxDist = 0;
+    for (const n of clusterNodes) {
+      const [rx, ry] = applyMat3(rotRef.current, n.wx, n.wy, n.wz);
+      maxDist = Math.max(maxDist, Math.hypot(rx - avgX, ry - avgY));
+    }
+    const viewSize = Math.min(w, h) * 0.35;
+    const targetScale = Math.max(baseScaleRef.current * 1.5, Math.min(4, viewSize / Math.max(maxDist, 50)));
+
+    zoomTargetRef.current = {
+      scale: targetScale,
+      panX: -avgX * targetScale,
+      panY: -avgY * targetScale,
+    };
+    zoomedClusterRef.current = label;
+    setZoomed(true);
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    zoomTargetRef.current = {
+      scale: baseScaleRef.current,
+      panX: 0,
+      panY: 0,
+    };
+    zoomedClusterRef.current = null;
+    setZoomed(false);
+  }, []);
+
   const onPointerUp = useCallback(() => {
     holdingTagRef.current = false;
     const ix = interactRef.current;
     if (!ix.hasMoved && ix.nodeId) {
       const id    = ix.nodeId;
-      const newId = id === selectRef.current ? null : id;
-      selectRef.current = newId;
-      setSelectedNode(newId ? (nodesRef.current.find(n => n.id === newId) ?? null) : null);
+      const node = nodesRef.current.find(n => n.id === id);
+
+      // If clicking a supertag, zoom into that cluster
+      if (node?.type === "supertag") {
+        if (zoomedClusterRef.current === node.label) {
+          // Already zoomed into this cluster — toggle selection normally
+          const newId = id === selectRef.current ? null : id;
+          selectRef.current = newId;
+          setSelectedNode(newId ? node : null);
+        } else {
+          // Zoom into the cluster
+          selectRef.current = id;
+          setSelectedNode(node);
+          zoomToCluster(node);
+        }
+      } else {
+        const newId = id === selectRef.current ? null : id;
+        selectRef.current = newId;
+        setSelectedNode(newId ? (node ?? null) : null);
+      }
     }
     interactRef.current = { active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false };
     if (canvasRef.current) canvasRef.current.style.cursor = "grab";
-  }, []);
+  }, [zoomToCluster]);
 
   const onPointerLeave = useCallback(() => {
     if (!interactRef.current.active) hoverRef.current = null;
@@ -742,6 +832,11 @@ export default function NebulaCanvas() {
 
       {/* Controls */}
       <div className="absolute top-3 left-3 flex gap-2">
+        {zoomed && (
+          <button onClick={zoomOut} className="glass rounded-lg px-3 py-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors" title="Back to overview">
+            <ArrowLeft size={14} /> Overview
+          </button>
+        )}
         <button onClick={loadDocs} className="glass rounded-lg p-2 text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
           <RefreshCw size={14} />
         </button>
@@ -753,7 +848,7 @@ export default function NebulaCanvas() {
       {!loading && docs.length > 0 && (
         <div className="absolute bottom-4 left-4 pointer-events-none">
           <p className="text-[11px] text-muted-foreground/50">
-            {docs.length} stars · drag to spin · scroll to zoom · click a star to explore
+            {docs.length} stars · drag to spin · scroll to zoom · click a domain to dive in
           </p>
         </div>
       )}
