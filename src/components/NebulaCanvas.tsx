@@ -6,10 +6,30 @@ import { X, MessageCircle, Search, Trash2, Plus, RefreshCw } from "lucide-react"
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
-// All knowledge points: soft blue. Tags (topics): warm gold.
+// All knowledge points: soft blue. Tags (topics): warm gold spectrum.
 const DOC_COLOR: [number, number, number] = [96, 165, 250];
-const TAG_COLOR: [number, number, number] = [251, 191, 36];
+const SUPERTAG_COLOR: [number, number, number] = [255, 200, 40]; // bright gold for domains
+const TAG_COLOR: [number, number, number] = [251, 191, 36];       // gold for sub-topics
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
+
+// ── Topic hierarchy ──────────────────────────────────────────────────────────
+// Super-tags are large conceptual domains; sub-tags orbit within them.
+const TAXONOMY: Record<string, string[]> = {
+  "philosophy":      ["ethics", "epistemology", "aesthetics", "religion", "mythology"],
+  "science":         ["biology", "physics", "mathematics", "space", "plants"],
+  "technology":      ["AI", "ai", "deep-learning", "neural-networks", "computer-science", "computer-architecture"],
+  "arts":            ["art", "photography", "cinema", "music", "architecture"],
+  "literature":      ["french-literature", "poetry", "linguistics"],
+  "social sciences": ["sociology", "psychology", "economics", "politics", "history", "education", "law", "journalism", "crime"],
+};
+
+// Build reverse lookup: child → parent
+const CHILD_TO_PARENT = new Map<string, string>();
+for (const [parent, children] of Object.entries(TAXONOMY)) {
+  for (const child of children) {
+    CHILD_TO_PARENT.set(child.toLowerCase(), parent);
+  }
+}
 
 // ── 3-D maths ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +59,8 @@ function rotY(a: number): Mat3 { const c=Math.cos(a),s=Math.sin(a); return [c,0,
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SimNode {
-  id: string; type: "doc" | "tag"; label: string;
+  id: string; type: "doc" | "tag" | "supertag"; label: string;
+  level: number; // 0 = supertag, 1 = tag, 2 = doc
   wx: number; wy: number; wz: number;
   vx: number; vy: number; vz: number;
   ax: number; ay: number; az: number;
@@ -72,63 +93,163 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     edges.push({ source: a, target: b, restLength: rest, strong });
   };
 
-  const tagIds = new Map<string, string>();
-  const tagArr = [...new Set(docs.flatMap(d => d.tags))];
-  const phi_g  = Math.PI * (3 - Math.sqrt(5));
-  tagArr.forEach((tag, i) => {
-    const t   = i / Math.max(tagArr.length, 1);
-    const y   = 1 - t * 2;
-    const r   = Math.sqrt(Math.max(0, 1 - y * y));
-    const ang = phi_g * i;
-    const rad = sR * 0.45;
-    const id  = `tag:${tag}`;
-    tagIds.set(tag, id);
-    nodes.push({
-      id, type: "tag", label: tag,
-      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
-      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 8, color: TAG_COLOR,
-    });
-  });
+  const phi_g = Math.PI * (3 - Math.sqrt(5));
 
-  const N = Math.max(docs.length, 1);
-  docs.forEach((doc, i) => {
-    const color  = DOC_COLOR;
-    const t      = i / N;
-    const y      = 1 - t * 2;
-    const r      = Math.sqrt(Math.max(0, 1 - y * y));
-    const ang    = phi_g * i;
-    const rad    = sR * (0.75 + Math.random() * 0.3);
-    const id     = `doc:${doc.id}`;
-    nodes.push({
-      id, type: "doc", label: doc.title,
-      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
-      vx: (Math.random()-.5)*.3, vy: (Math.random()-.5)*.3, vz: (Math.random()-.5)*.3,
-      ax: 0, ay: 0, az: 0,
-      radius: 5 + Math.min(doc.chunk_count / 10, 5),
-      color, doc,
-    });
-    doc.tags.forEach(t2 => {
-      const tid = tagIds.get(t2);
-      if (tid) addEdge(id, tid, sR * 0.55, true);
-    });
-  });
+  // 1. Collect all tags and classify them
+  const allTags = [...new Set(docs.flatMap(d => d.tags))];
+  const supertagNames = new Set<string>();
+  const subtagToSuper = new Map<string, string>();
+  const orphanTags = new Set<string>(); // tags that are neither super nor sub
 
-  for (let i = 0; i < docs.length; i++) {
-    for (let j = i + 1; j < docs.length; j++) {
-      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
-        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.65, false);
+  for (const tag of allTags) {
+    const tagLower = tag.toLowerCase();
+    // Is this tag a known supertag name?
+    if (TAXONOMY[tagLower] || TAXONOMY[tag]) {
+      supertagNames.add(tag);
+    }
+    // Is this tag a known child?
+    else if (CHILD_TO_PARENT.has(tagLower)) {
+      subtagToSuper.set(tag, CHILD_TO_PARENT.get(tagLower)!);
+      supertagNames.add(CHILD_TO_PARENT.get(tagLower)!);
+    }
+    else {
+      orphanTags.add(tag);
     }
   }
 
-  const K = Math.min(3, nodes.length - 1);
-  for (let i = 0; i < nodes.length; i++) {
-    nodes
-      .map((n, j) => ({ j, d: Math.hypot(n.wx-nodes[i].wx, n.wy-nodes[i].wy, n.wz-nodes[i].wz) }))
-      .filter(x => x.j !== i)
-      .sort((a, b) => a.d - b.d)
-      .slice(0, K)
-      .forEach(({ j }) => addEdge(nodes[i].id, nodes[j].id, sR * 0.6, false));
+  // Promote orphan tags that have enough docs to be their own supertag
+  // Otherwise they become standalone tags (level 1)
+  const tagDocCount = new Map<string, number>();
+  for (const doc of docs) {
+    for (const tag of doc.tags) {
+      tagDocCount.set(tag, (tagDocCount.get(tag) || 0) + 1);
+    }
+  }
+
+  const nodeIds = new Map<string, string>(); // tag/supertag name → node id
+
+  // 2. Create supertag nodes (level 0) — large gold spheres
+  const superArr = [...supertagNames];
+  superArr.forEach((st, i) => {
+    const t = i / Math.max(superArr.length, 1);
+    const y = 1 - t * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const ang = phi_g * i;
+    const rad = sR * 0.35;
+    const id = `supertag:${st}`;
+    nodeIds.set(st, id);
+    nodes.push({
+      id, type: "supertag", label: st, level: 0,
+      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 12, color: SUPERTAG_COLOR,
+    });
+  });
+
+  // Connect supertags to each other weakly (spread them apart)
+  for (let i = 0; i < superArr.length; i++) {
+    for (let j = i + 1; j < superArr.length; j++) {
+      addEdge(nodeIds.get(superArr[i])!, nodeIds.get(superArr[j])!, sR * 0.9, false);
+    }
+  }
+
+  // 3. Create sub-tag nodes (level 1) — medium gold, positioned near parent
+  const allSubtags = [...subtagToSuper.entries()];
+  // Also add orphan tags as level-1 nodes
+  const orphanArr = [...orphanTags];
+
+  allSubtags.forEach(([tag, parentName], i) => {
+    const parentId = nodeIds.get(parentName);
+    const parentNode = parentId ? nodes.find(n => n.id === parentId) : null;
+    const offset = phi_g * i;
+    const spread = sR * 0.2;
+    const px = parentNode ? parentNode.wx : 0;
+    const py = parentNode ? parentNode.wy : 0;
+    const pz = parentNode ? parentNode.wz : 0;
+
+    const id = `tag:${tag}`;
+    nodeIds.set(tag, id);
+    nodes.push({
+      id, type: "tag", label: tag, level: 1,
+      wx: px + Math.cos(offset) * spread,
+      wy: py + Math.sin(offset * 0.7) * spread * 0.5,
+      wz: pz + Math.sin(offset) * spread,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 7, color: TAG_COLOR,
+    });
+
+    // Strong edge to parent supertag
+    if (parentId) addEdge(id, parentId, sR * 0.25, true);
+  });
+
+  orphanArr.forEach((tag, i) => {
+    const t = i / Math.max(orphanArr.length, 1);
+    const y = 1 - t * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const ang = phi_g * (i + allSubtags.length);
+    const rad = sR * 0.5;
+
+    const id = `tag:${tag}`;
+    nodeIds.set(tag, id);
+    nodes.push({
+      id, type: "tag", label: tag, level: 1,
+      wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
+      vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
+      radius: 7, color: TAG_COLOR,
+    });
+  });
+
+  // 4. Create document nodes (level 2) — small blue, near their most specific tag
+  const N = Math.max(docs.length, 1);
+  docs.forEach((doc, i) => {
+    // Find the most specific tag this doc has (prefer subtag over supertag)
+    let bestTagId: string | null = null;
+    let bestNode: SimNode | null = null;
+    for (const tag of doc.tags) {
+      const tid = nodeIds.get(tag);
+      if (!tid) continue;
+      const tnode = nodes.find(n => n.id === tid);
+      if (!tnode) continue;
+      // Prefer subtags (level 1 with parent) over supertags
+      if (!bestNode || (tnode.type === "tag" && bestNode.type === "supertag")) {
+        bestTagId = tid;
+        bestNode = tnode;
+      }
+    }
+
+    const offset = phi_g * i;
+    const spread = sR * 0.18;
+    const px = bestNode ? bestNode.wx : 0;
+    const py = bestNode ? bestNode.wy : 0;
+    const pz = bestNode ? bestNode.wz : 0;
+
+    const id = `doc:${doc.id}`;
+    nodes.push({
+      id, type: "doc", label: doc.title, level: 2,
+      wx: px + Math.cos(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
+      wy: py + Math.sin(offset * 1.3) * spread * 0.4,
+      wz: pz + Math.sin(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      vz: (Math.random() - 0.5) * 0.3,
+      ax: 0, ay: 0, az: 0,
+      radius: 4 + Math.min(doc.chunk_count / 10, 4),
+      color: DOC_COLOR, doc,
+    });
+
+    // Connect doc to all its tags
+    for (const tag of doc.tags) {
+      const tid = nodeIds.get(tag);
+      if (tid) addEdge(id, tid, sR * 0.22, true);
+    }
+  });
+
+  // 5. Light cross-links between docs sharing tags (but fewer to avoid clutter)
+  for (let i = 0; i < docs.length; i++) {
+    for (let j = i + 1; j < Math.min(docs.length, i + 30); j++) {
+      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
+        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.35, false);
+    }
   }
 
   return { nodes, edges };
@@ -274,8 +395,12 @@ function paint3D(
     const opa = 0.25 + 0.75 * depth;
     const rad = n.radius * sz;
 
-    const glowMult  = active ? 8 : n.type === "tag" ? 6 : 5;
-    const glowAlpha = (active ? 0.6 : n.type === "tag" ? 0.32 : 0.2) * opa;
+    const isSuperTag = n.type === "supertag";
+    const isTag = n.type === "tag";
+    const isTagLike = isSuperTag || isTag;
+
+    const glowMult  = active ? 8 : isSuperTag ? 9 : isTag ? 6 : 5;
+    const glowAlpha = (active ? 0.6 : isSuperTag ? 0.4 : isTag ? 0.32 : 0.2) * opa;
     const gr = n.radius * glowMult * sz;
     const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, gr);
     glow.addColorStop(0,    `rgba(${r},${g},${b},${glowAlpha})`);
@@ -291,24 +416,42 @@ function paint3D(
     ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2);
     ctx.fillStyle = core; ctx.fill();
 
-    if (n.type === "tag") {
-      const s = rad * 2.8;
-      ctx.strokeStyle = `rgba(${r},${g},${b},${0.4 * opa})`;
-      ctx.lineWidth = 0.9;
+    // Crosshair for supertags, smaller cross for subtags
+    if (isSuperTag) {
+      const s = rad * 3.5;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.5 * opa})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sx-s, sy); ctx.lineTo(sx+s, sy);
+      ctx.moveTo(sx, sy-s); ctx.lineTo(sx, sy+s);
+      ctx.stroke();
+      // Orbit ring hint
+      ctx.beginPath();
+      ctx.arc(sx, sy, rad * 4, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.12 * opa})`;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    } else if (isTag) {
+      const s = rad * 2.5;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 * opa})`;
+      ctx.lineWidth = 0.7;
       ctx.beginPath();
       ctx.moveTo(sx-s, sy); ctx.lineTo(sx+s, sy);
       ctx.moveTo(sx, sy-s); ctx.lineTo(sx, sy+s);
       ctx.stroke();
     }
 
-    if (n.type === "tag" || active || linked) {
+    // Labels: always show for supertags, show for tags, show for active/linked docs
+    if (isTagLike || active || linked) {
       const txt = n.label.length > 24 ? n.label.slice(0, 22) + "…" : n.label;
-      const fs  = n.type === "tag" ? 11 : linked ? 10 : 10;
-      ctx.font      = n.type === "tag" ? `bold ${fs}px system-ui,sans-serif` : `${fs}px system-ui,sans-serif`;
+      const fs  = isSuperTag ? 13 : isTag ? 10 : 9;
+      ctx.font      = isSuperTag ? `bold ${fs}px system-ui,sans-serif`
+                     : isTag ? `600 ${fs}px system-ui,sans-serif`
+                     : `${fs}px system-ui,sans-serif`;
       ctx.textAlign = "center";
-      const labelOpa = active ? 1 : linked ? 0.9 : 0.8;
+      const labelOpa = active ? 1 : isSuperTag ? 0.95 : linked ? 0.9 : 0.8;
       ctx.fillStyle = `rgba(${r},${g},${b},${labelOpa * opa})`;
-      ctx.fillText(txt, sx, sy + rad + 13);
+      ctx.fillText(txt, sx, sy + rad + (isSuperTag ? 16 : 13));
     }
   }
 }
@@ -464,7 +607,7 @@ export default function NebulaCanvas() {
     const mx     = e.clientX - rect.left, my = e.clientY - rect.top;
     const node   = nodeAtScreen(mx, my);
     hoverRef.current = node?.id ?? null;
-    holdingTagRef.current = node?.type === "tag";
+    holdingTagRef.current = node?.type === "tag" || node?.type === "supertag";
     interactRef.current = { active: true, nodeId: node?.id ?? null, lastMx: mx, lastMy: my, hasMoved: false };
     canvasRef.current!.style.cursor = node ? "pointer" : "grabbing";
   }, [nodeAtScreen]);
@@ -589,9 +732,17 @@ export default function NebulaCanvas() {
                   {" · "}{selectedNode.doc.chunk_count} chunks
                 </p>
               )}
+              {selectedNode.type === "supertag" && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Domain · {docs.filter(d => d.tags.some(t => {
+                    const parent = CHILD_TO_PARENT.get(t.toLowerCase());
+                    return t === selectedNode.label || parent === selectedNode.label;
+                  })).length} documents
+                </p>
+              )}
               {selectedNode.type === "tag" && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Tag · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
+                  Topic · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
                 </p>
               )}
             </div>
@@ -627,9 +778,17 @@ export default function NebulaCanvas() {
             </>
           )}
 
-          {selectedNode.type === "tag" && (
+          {(selectedNode.type === "tag" || selectedNode.type === "supertag") && (
             <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
-              {docs.filter(d => d.tags.includes(selectedNode.label)).map(d => (
+              {docs.filter(d => {
+                if (selectedNode.type === "supertag") {
+                  return d.tags.some(t => {
+                    const parent = CHILD_TO_PARENT.get(t.toLowerCase());
+                    return t === selectedNode.label || parent === selectedNode.label;
+                  });
+                }
+                return d.tags.includes(selectedNode.label);
+              }).map(d => (
                 <button
                   key={d.id}
                   onClick={() => {
