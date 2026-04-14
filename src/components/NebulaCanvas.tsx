@@ -533,6 +533,7 @@ export default function NebulaCanvas() {
   const [docs, setDocs]       = useState<KnowledgeDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [zoomed, setZoomed]   = useState(false); // true when zoomed into a cluster
 
   docsRef.current = docs;
 
