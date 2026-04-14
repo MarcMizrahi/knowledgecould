@@ -208,6 +208,7 @@ function paint3D(
   dust: Dust[],
   hoverId: string | null,
   selectId: string | null,
+  linkedIds: Set<string>,
   rot: Mat3,
   sR: number,
   userScale: number,
