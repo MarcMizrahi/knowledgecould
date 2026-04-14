@@ -992,7 +992,7 @@ export default function NebulaCanvas() {
                 </p>
               )}
             </div>
-            <button onClick={() => { selectRef.current = null; setSelectedNode(null); }} className="text-muted-foreground hover:text-foreground flex-shrink-0 mt-0.5">
+            <button onClick={() => { selectRef.current = null; setSelectedNode(null); if (zoomedClusterRef.current) zoomOut(); }} className="text-muted-foreground hover:text-foreground flex-shrink-0 mt-0.5">
               <X size={14} />
             </button>
           </div>
