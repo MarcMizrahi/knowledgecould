@@ -49,17 +49,17 @@ export default function SearchPanel({ initialQuery }: SearchPanelProps) {
         </p>
       </div>
 
-      <form onSubmit={handleSearch} className="flex gap-2">
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder='What do you want to find? (e.g. "machine learning architectures")'
+          placeholder='What do you want to find?'
           className="flex-1 bg-input border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring"
         />
         <button
           type="submit"
           disabled={loading || !query.trim()}
-          className="px-5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-xl transition-colors flex items-center gap-2"
+          className="px-5 py-3 sm:py-0 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-xl transition-colors flex items-center justify-center gap-2"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
           Search
@@ -85,7 +85,7 @@ export default function SearchPanel({ initialQuery }: SearchPanelProps) {
             <div className="space-y-3">
               {results.map((hit, i) => (
                 <div key={i} className="glass rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="shrink-0">
                         {SOURCE_ICONS[hit.metadata.source_type] ?? "📄"}
@@ -103,12 +103,12 @@ export default function SearchPanel({ initialQuery }: SearchPanelProps) {
                         {hit.metadata.source_type}
                       </span>
                     </div>
-                    <div className="shrink-0 text-right">
+                    <div className="shrink-0 flex items-center sm:block sm:text-right gap-2">
                       <span className="text-xs text-muted-foreground">
                         {(hit.score * 100).toFixed(0)}% match
                       </span>
                       <div
-                        className="score-bar mt-1 w-16"
+                        className="score-bar mt-0 sm:mt-1 w-16"
                         style={{ width: `${hit.score * 100}%`, maxWidth: 64 }}
                       />
                     </div>
