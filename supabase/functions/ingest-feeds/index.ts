@@ -18,7 +18,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Optional: ingest a single feed by id
     let feedFilter: string | null = null;
     try {
       const body = await req.json();
@@ -27,7 +26,6 @@ serve(async (req) => {
       // No body is fine — process all feeds
     }
 
-    // Get active feeds
     let query = supabase.from("feeds").select("*").eq("is_active", true);
     if (feedFilter) {
       query = query.eq("id", feedFilter);
@@ -42,12 +40,15 @@ serve(async (req) => {
       );
     }
 
+    // Fetch existing tags from all documents to help AI match existing topics
+    const existingTags = await getExistingTags(supabase);
+
     let totalIngested = 0;
     const results: any[] = [];
 
     for (const feed of feeds) {
       try {
-        const feedResult = await processFeed(supabase, feed);
+        const feedResult = await processFeed(supabase, feed, existingTags);
         totalIngested += feedResult.newArticles;
         results.push({ feed_id: feed.id, url: feed.url, ...feedResult });
       } catch (err) {
@@ -74,8 +75,125 @@ serve(async (req) => {
   }
 });
 
-async function processFeed(supabase: any, feed: any) {
-  // Fetch the RSS/Atom feed
+// ── Existing tags ─────────────────────────────────────────────────────────────
+
+async function getExistingTags(supabase: any): Promise<string[]> {
+  const { data } = await supabase.from("documents").select("tags");
+  if (!data) return [];
+  const tagSet = new Set<string>();
+  for (const doc of data) {
+    if (doc.tags) {
+      for (const t of doc.tags) {
+        // Skip generic tags that shouldn't be reused as topics
+        if (t !== "rss" && t.length > 1) tagSet.add(t);
+      }
+    }
+  }
+  return [...tagSet];
+}
+
+// ── AI topic extraction ───────────────────────────────────────────────────────
+
+async function extractTopicTags(
+  title: string,
+  content: string,
+  existingTags: string[]
+): Promise<string[]> {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) {
+    // Fallback: simple keyword extraction
+    return fallbackExtractTags(title, content, existingTags);
+  }
+
+  const snippet = content.slice(0, 1500);
+  const existingList = existingTags.length > 0
+    ? `\nExisting topics in the knowledge base: ${existingTags.join(", ")}`
+    : "";
+
+  try {
+    const res = await fetch("https://ai.lovable.dev/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          {
+            role: "system",
+            content: `You are a topic classifier. Given an article title and content, return 1-4 short topic tags (1-2 words each, lowercase). 
+IMPORTANT: Prefer matching existing topics when the article relates to them. Only create new topic tags when the content genuinely covers a new subject.${existingList}
+
+Respond with ONLY a JSON array of strings, nothing else. Example: ["plants", "gardening", "indoor growing"]`,
+          },
+          {
+            role: "user",
+            content: `Title: ${title}\n\nContent: ${snippet}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 100,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("AI tagging failed:", res.status);
+      return fallbackExtractTags(title, content, existingTags);
+    }
+
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    
+    // Parse JSON array from response
+    const match = text.match(/\[[\s\S]*?\]/);
+    if (match) {
+      const tags = JSON.parse(match[0]) as string[];
+      return tags
+        .filter((t: any) => typeof t === "string" && t.length > 0)
+        .map((t: string) => t.toLowerCase().trim())
+        .slice(0, 4);
+    }
+  } catch (err) {
+    console.error("AI tagging error:", err);
+  }
+
+  return fallbackExtractTags(title, content, existingTags);
+}
+
+function fallbackExtractTags(
+  title: string,
+  content: string,
+  existingTags: string[]
+): string[] {
+  // Simple keyword matching against existing tags
+  const text = `${title} ${content.slice(0, 2000)}`.toLowerCase();
+  const matched = existingTags.filter((tag) => text.includes(tag.toLowerCase()));
+
+  if (matched.length > 0) return matched.slice(0, 4);
+
+  // Extract simple topic from title words (skip common words)
+  const stopWords = new Set([
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "has", "have", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "can", "this", "that", "these", "those",
+    "how", "what", "when", "where", "why", "who", "which", "its", "it",
+    "new", "top", "best", "most", "more", "your", "you", "we", "our",
+  ]);
+
+  const words = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !stopWords.has(w));
+
+  return words.slice(0, 2);
+}
+
+// ── Feed processing ───────────────────────────────────────────────────────────
+
+async function processFeed(supabase: any, feed: any, existingTags: string[]) {
   const res = await fetch(feed.url, {
     headers: { "User-Agent": "KnowledgeNebula/1.0" },
   });
@@ -88,26 +206,22 @@ async function processFeed(supabase: any, feed: any) {
     return { newArticles: 0, title: feed.title };
   }
 
-  // Update feed title from the feed itself if we don't have one
   const feedTitle = extractFeedTitle(xml) || feed.title;
   if (!feed.title && feedTitle) {
     await supabase.from("feeds").update({ title: feedTitle }).eq("id", feed.id);
   }
 
-  // Filter to only new articles (published after last_fetched_at)
   const lastFetched = feed.last_fetched_at ? new Date(feed.last_fetched_at) : new Date(0);
   const newArticles = articles.filter((a) => {
-    if (!a.pubDate) return true; // Include articles without dates
+    if (!a.pubDate) return true;
     return new Date(a.pubDate) > lastFetched;
   });
 
   if (newArticles.length === 0) {
-    // Update last_fetched_at even if no new articles
     await supabase.from("feeds").update({ last_fetched_at: new Date().toISOString() }).eq("id", feed.id);
     return { newArticles: 0, title: feedTitle };
   }
 
-  // Check for duplicates by title
   const titles = newArticles.map((a) => a.title);
   const { data: existing } = await supabase
     .from("documents")
@@ -120,16 +234,14 @@ async function processFeed(supabase: any, feed: any) {
 
   let ingested = 0;
   for (const article of toIngest.slice(0, 20)) {
-    // Limit to 20 per run to avoid timeouts
     try {
-      await ingestArticle(supabase, feed.id, article, feedTitle);
+      await ingestArticle(supabase, feed.id, article, existingTags);
       ingested++;
     } catch (err) {
       console.error(`Error ingesting article "${article.title}":`, err);
     }
   }
 
-  // Update feed stats
   await supabase
     .from("feeds")
     .update({
@@ -141,15 +253,18 @@ async function processFeed(supabase: any, feed: any) {
   return { newArticles: ingested, title: feedTitle };
 }
 
-async function ingestArticle(supabase: any, feedId: string, article: any, feedTitle: string) {
+async function ingestArticle(supabase: any, feedId: string, article: any, existingTags: string[]) {
   const content = article.content || article.description || "";
-  // Strip HTML tags for plain text
   const plainContent = content.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const preview = plainContent.slice(0, 500);
 
-  const tags = ["rss", feedTitle].filter(Boolean);
+  // Use AI to extract real topic tags instead of generic "rss" labels
+  const tags = await extractTopicTags(
+    article.title || "Untitled",
+    plainContent,
+    existingTags
+  );
 
-  // Create document
   const { data: doc, error } = await supabase
     .from("documents")
     .insert({
@@ -167,7 +282,6 @@ async function ingestArticle(supabase: any, feedId: string, article: any, feedTi
 
   if (error) throw new Error(error.message);
 
-  // Chunk the content
   const chunks = chunkText(plainContent, 1000, 200);
   if (chunks.length > 0) {
     await supabase.from("chunks").insert(
@@ -184,6 +298,8 @@ async function ingestArticle(supabase: any, feedId: string, article: any, feedTi
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function chunkText(text: string, size: number, overlap: number): string[] {
   if (!text || text.length === 0) return [];
   const chunks: string[] = [];
@@ -198,14 +314,10 @@ function chunkText(text: string, size: number, overlap: number): string[] {
 }
 
 function extractFeedTitle(xml: string): string | null {
-  // Try RSS <title>
   const rssMatch = xml.match(/<channel[^>]*>[\s\S]*?<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
   if (rssMatch) return rssMatch[1].trim();
-
-  // Try Atom <title>
   const atomMatch = xml.match(/<feed[^>]*>[\s\S]*?<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
   if (atomMatch) return atomMatch[1].trim();
-
   return null;
 }
 
@@ -220,7 +332,6 @@ interface Article {
 function parseRSSorAtom(xml: string): Article[] {
   const articles: Article[] = [];
 
-  // Try RSS 2.0 <item> elements
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
   while ((match = itemRegex.exec(xml)) !== null) {
@@ -236,7 +347,6 @@ function parseRSSorAtom(xml: string): Article[] {
 
   if (articles.length > 0) return articles;
 
-  // Try Atom <entry> elements
   const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
   while ((match = entryRegex.exec(xml)) !== null) {
     const entry = match[1];
