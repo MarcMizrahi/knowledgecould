@@ -625,6 +625,16 @@ export default function NebulaCanvas() {
       av.rx *= 0.94;
 
       step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+
+      // Animate camera toward zoom target
+      const zt = zoomTargetRef.current;
+      if (zt) {
+        const lerp = 0.07;
+        scaleRef.current += (zt.scale - scaleRef.current) * lerp;
+        panRef.current.x += (zt.panX - panRef.current.x) * lerp;
+        panRef.current.y += (zt.panY - panRef.current.y) * lerp;
+      }
+
       // Compute linked node IDs for the selected node
       const linked = new Set<string>();
       const sel = selectRef.current;
@@ -638,7 +648,9 @@ export default function NebulaCanvas() {
       paint3D(
         ctx, nodesRef.current, edgesRef.current, dustRef.current,
         hoverRef.current, selectRef.current, linked,
-        rotRef.current, sphereRRef.current, scaleRef.current, t / 1000,
+        rotRef.current, sphereRRef.current, scaleRef.current,
+        panRef.current.x, panRef.current.y,
+        t / 1000,
       );
       rafRef.current = requestAnimationFrame(loop);
     };
