@@ -832,6 +832,11 @@ export default function NebulaCanvas() {
 
       {/* Controls */}
       <div className="absolute top-3 left-3 flex gap-2">
+        {zoomed && (
+          <button onClick={zoomOut} className="glass rounded-lg px-3 py-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors" title="Back to overview">
+            <ArrowLeft size={14} /> Overview
+          </button>
+        )}
         <button onClick={loadDocs} className="glass rounded-lg p-2 text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
           <RefreshCw size={14} />
         </button>
