@@ -33,6 +33,12 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Knowledge Nebula" },
       { name: "description", content: "AI-powered personal knowledge universe" },
+      { property: "og:title", content: "Knowledge Nebula" },
+      { name: "twitter:title", content: "Knowledge Nebula" },
+      { property: "og:description", content: "AI-powered personal knowledge universe" },
+      { name: "twitter:description", content: "AI-powered personal knowledge universe" },
+      { name: "twitter:card", content: "summary" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
