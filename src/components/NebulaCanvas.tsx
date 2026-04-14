@@ -504,6 +504,102 @@ function paint3D(
   }
 }
 
+// ── Tag Document List ──────────────────────────────────────────────────────────
+
+function TagDocumentList({
+  docs,
+  selectedNode,
+  taxonomyRef,
+  nodesRef,
+  selectRef,
+  setSelectedNode,
+}: {
+  docs: KnowledgeDoc[];
+  selectedNode: SimNode;
+  taxonomyRef: React.MutableRefObject<{ subtagToSuper: Map<string, string> }>;
+  nodesRef: React.MutableRefObject<SimNode[]>;
+  selectRef: React.MutableRefObject<string | null>;
+  setSelectedNode: (n: SimNode | null) => void;
+}) {
+  const [filter, setFilter] = useState("");
+
+  const filteredDocs = docs
+    .filter((d) => {
+      if (selectedNode.type === "supertag") {
+        return d.tags.some((t) => {
+          const parent = taxonomyRef.current.subtagToSuper.get(t);
+          return t === selectedNode.label || parent === selectedNode.label;
+        });
+      }
+      return d.tags.includes(selectedNode.label);
+    })
+    .filter((d) => !filter || d.title.toLowerCase().includes(filter.toLowerCase()));
+
+  // Group by source type for better readability
+  const grouped = new Map<string, KnowledgeDoc[]>();
+  for (const d of filteredDocs) {
+    const key = d.source_type;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(d);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">
+          {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+      {docs.filter((d) => {
+        if (selectedNode.type === "supertag") {
+          return d.tags.some((t) => {
+            const parent = taxonomyRef.current.subtagToSuper.get(t);
+            return t === selectedNode.label || parent === selectedNode.label;
+          });
+        }
+        return d.tags.includes(selectedNode.label);
+      }).length > 5 && (
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter documents…"
+          className="w-full text-xs bg-accent/10 border border-border/30 rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/30"
+        />
+      )}
+      <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
+        {[...grouped.entries()].map(([type, typeDocs]) => (
+          <div key={type}>
+            <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider px-1 mb-1 flex items-center gap-1">
+              <span>{SOURCE_ICONS[type]}</span>
+              <span>{type}</span>
+              <span className="text-muted-foreground/30">({typeDocs.length})</span>
+            </p>
+            {typeDocs.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => {
+                  const n = nodesRef.current.find((x) => x.id === `doc:${d.id}`);
+                  if (n) {
+                    selectRef.current = n.id;
+                    setSelectedNode(n);
+                  }
+                }}
+                className="w-full text-left text-xs text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-md hover:bg-accent/15 transition-colors truncate block leading-snug"
+              >
+                {d.title}
+              </button>
+            ))}
+          </div>
+        ))}
+        {filteredDocs.length === 0 && filter && (
+          <p className="text-xs text-muted-foreground/40 text-center py-2">No matches</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function NebulaCanvas() {
