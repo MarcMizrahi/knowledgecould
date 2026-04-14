@@ -334,6 +334,8 @@ export default function NebulaCanvas() {
   const scaleRef    = useRef(1);
   const sphereRRef  = useRef(300);
   const interactRef = useRef<Interaction>({ active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false });
+  const holdingTagRef = useRef(false);
+  const dampRef     = useRef(1); // 1 = full speed, 0 = stopped
   const rafRef      = useRef<number>(0);
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
