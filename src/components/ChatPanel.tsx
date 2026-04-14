@@ -158,9 +158,9 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-10rem)]">
+    <div className="flex flex-col h-[calc(100vh-8rem)] sm:h-[calc(100vh-10rem)]">
       <div className="mb-4">
-        <h1 className="text-3xl font-bold gradient-text font-display">Chat with Knowledge</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-display">Chat with Knowledge</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Ask anything — answers are grounded in your documents
         </p>
@@ -178,7 +178,7 @@ export default function ChatPanel() {
                 Questions are answered using your uploaded documents
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 max-w-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg">
               {STARTERS.map((s) => (
                 <button
                   key={s}
@@ -206,7 +206,7 @@ export default function ChatPanel() {
               )}
               <div
                 className={cn(
-                  "max-w-[80%] space-y-2",
+                  "max-w-[90%] sm:max-w-[80%] space-y-2",
                   msg.role === "user" ? "items-end" : "items-start"
                 )}
               >

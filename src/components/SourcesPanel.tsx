@@ -119,7 +119,7 @@ export default function SourcesPanel() {
           <Rss size={18} className="text-primary" />
           Add RSS Feed
         </div>
-        <form onSubmit={addFeed} className="flex gap-2">
+        <form onSubmit={addFeed} className="flex flex-col sm:flex-row gap-2">
           <input
             type="url"
             value={url}
@@ -130,7 +130,7 @@ export default function SourcesPanel() {
           <button
             type="submit"
             disabled={adding}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium rounded-xl text-sm transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium rounded-xl text-sm transition-colors"
           >
             <Plus size={15} />
             {adding ? "Adding…" : "Add"}

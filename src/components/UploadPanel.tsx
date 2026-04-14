@@ -125,13 +125,13 @@ export default function UploadPanel() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold gradient-text font-display">Add Knowledge</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-display">Add Knowledge</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Upload files, import URLs, or write notes — they&apos;ll be chunked and indexed for search and chat.
         </p>
       </div>
 
-      <div className="glass rounded-2xl p-6 space-y-5">
+      <div className="glass rounded-2xl p-4 sm:p-6 space-y-5">
         {/* Tabs */}
         <div className="flex gap-1 bg-accent p-1 rounded-lg">
           {tabs.map((t) => (
@@ -159,7 +159,7 @@ export default function UploadPanel() {
             <div>
               <div
                 className={cn(
-                  "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors",
+                  "border-2 border-dashed rounded-xl p-4 sm:p-8 text-center cursor-pointer transition-colors",
                   dragOver
                     ? "border-primary bg-primary/10"
                     : "border-border hover:border-muted-foreground",
