@@ -373,12 +373,14 @@ function paint3D(
   rot: Mat3,
   sR: number,
   userScale: number,
+  panX: number,
+  panY: number,
   t: number,
 ) {
   const dpr = window.devicePixelRatio || 1;
   const w   = ctx.canvas.width / dpr;
   const h   = ctx.canvas.height / dpr;
-  const cx  = w / 2, cy = h / 2;
+  const cx  = w / 2 + panX, cy = h / 2 + panY;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
