@@ -703,18 +703,87 @@ export default function NebulaCanvas() {
     ix.lastMx = mx; ix.lastMy = my;
   }, [nodeAtScreen]);
 
+  const zoomToCluster = useCallback((supertagNode: SimNode) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
+
+    // Find all nodes in this cluster (the supertag + its subtags + their docs)
+    const label = supertagNode.label;
+    const clusterNodes = nodesRef.current.filter(n => {
+      if (n.id === supertagNode.id) return true;
+      if (n.type === "tag" && taxonomyRef.current.subtagToSuper.get(n.label) === label) return true;
+      if (n.type === "doc" && n.doc?.tags.some(t => t === label || taxonomyRef.current.subtagToSuper.get(t) === label)) return true;
+      return false;
+    });
+    if (clusterNodes.length === 0) return;
+
+    // Compute projected center of the cluster
+    let sumX = 0, sumY = 0;
+    for (const n of clusterNodes) {
+      const [rx, ry] = applyMat3(rotRef.current, n.wx, n.wy, n.wz);
+      sumX += rx; sumY += ry;
+    }
+    const avgX = sumX / clusterNodes.length;
+    const avgY = sumY / clusterNodes.length;
+
+    // Compute cluster radius to determine zoom level
+    let maxDist = 0;
+    for (const n of clusterNodes) {
+      const [rx, ry] = applyMat3(rotRef.current, n.wx, n.wy, n.wz);
+      maxDist = Math.max(maxDist, Math.hypot(rx - avgX, ry - avgY));
+    }
+    const viewSize = Math.min(w, h) * 0.35;
+    const targetScale = Math.max(baseScaleRef.current * 1.5, Math.min(4, viewSize / Math.max(maxDist, 50)));
+
+    zoomTargetRef.current = {
+      scale: targetScale,
+      panX: -avgX * targetScale,
+      panY: -avgY * targetScale,
+    };
+    zoomedClusterRef.current = label;
+    setZoomed(true);
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    zoomTargetRef.current = {
+      scale: baseScaleRef.current,
+      panX: 0,
+      panY: 0,
+    };
+    zoomedClusterRef.current = null;
+    setZoomed(false);
+  }, []);
+
   const onPointerUp = useCallback(() => {
     holdingTagRef.current = false;
     const ix = interactRef.current;
     if (!ix.hasMoved && ix.nodeId) {
       const id    = ix.nodeId;
-      const newId = id === selectRef.current ? null : id;
-      selectRef.current = newId;
-      setSelectedNode(newId ? (nodesRef.current.find(n => n.id === newId) ?? null) : null);
+      const node = nodesRef.current.find(n => n.id === id);
+
+      // If clicking a supertag, zoom into that cluster
+      if (node?.type === "supertag") {
+        if (zoomedClusterRef.current === node.label) {
+          // Already zoomed into this cluster — toggle selection normally
+          const newId = id === selectRef.current ? null : id;
+          selectRef.current = newId;
+          setSelectedNode(newId ? node : null);
+        } else {
+          // Zoom into the cluster
+          selectRef.current = id;
+          setSelectedNode(node);
+          zoomToCluster(node);
+        }
+      } else {
+        const newId = id === selectRef.current ? null : id;
+        selectRef.current = newId;
+        setSelectedNode(newId ? (node ?? null) : null);
+      }
     }
     interactRef.current = { active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false };
     if (canvasRef.current) canvasRef.current.style.cursor = "grab";
-  }, []);
+  }, [zoomToCluster]);
 
   const onPointerLeave = useCallback(() => {
     if (!interactRef.current.active) hoverRef.current = null;
