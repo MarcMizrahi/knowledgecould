@@ -93,7 +93,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   const N = Math.max(docs.length, 1);
   docs.forEach((doc, i) => {
-    const color  = SOURCE_GLOW[doc.source_type] ?? DEF_COLOR;
+    const color  = DOC_COLOR;
     const t      = i / N;
     const y      = 1 - t * 2;
     const r      = Math.sqrt(Math.max(0, 1 - y * y));
