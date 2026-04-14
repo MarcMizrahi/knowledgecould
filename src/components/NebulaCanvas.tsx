@@ -169,35 +169,8 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   const phi_g = Math.PI * (3 - Math.sqrt(5));
 
-  // 1. Collect all tags and classify them
-  const allTags = [...new Set(docs.flatMap(d => d.tags))];
-  const supertagNames = new Set<string>();
-  const subtagToSuper = new Map<string, string>();
-  const orphanTags = new Set<string>(); // tags that are neither super nor sub
-
-  for (const tag of allTags) {
-    const tagLower = tag.toLowerCase();
-    // Is this tag a known supertag name?
-    if (TAXONOMY[tagLower] || TAXONOMY[tag]) {
-      supertagNames.add(tag);
-    }
-    // Is this tag a known child?
-    else if (CHILD_TO_PARENT.has(tagLower)) {
-      subtagToSuper.set(tag, CHILD_TO_PARENT.get(tagLower)!);
-      supertagNames.add(CHILD_TO_PARENT.get(tagLower)!);
-    }
-    else {
-      orphanTags.add(tag);
-    }
-  }
-
-  // Promote orphan tags that have enough docs to be their own supertag
-  // Otherwise they become standalone tags (level 1)
-  const tagDocCount = new Map<string, number>();
-  for (const doc of docs) {
-    for (const tag of doc.tags) {
-      tagDocCount.set(tag, (tagDocCount.get(tag) || 0) + 1);
-    }
+  // 1. Auto-derive the topic hierarchy from tag co-occurrence
+  const { supertagNames, subtagToSuper, orphanTags } = deriveTaxonomy(docs);
   }
 
   const nodeIds = new Map<string, string>(); // tag/supertag name → node id
