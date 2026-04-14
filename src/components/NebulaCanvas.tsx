@@ -152,7 +152,7 @@ function buildDust(w: number, h: number): Dust[] {
 
 // ── Physics (3-D) ─────────────────────────────────────────────────────────────
 
-function step3D(nodes: SimNode[], edges: SimEdge[], sR: number) {
+function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
   const map = new Map(nodes.map(n => [n.id, n]));
   nodes.forEach(n => { n.ax = 0; n.ay = 0; n.az = 0; });
 
@@ -190,7 +190,7 @@ function step3D(nodes: SimNode[], edges: SimEdge[], sR: number) {
     n.vz = (n.vz + n.az) * 0.97;
     const spd = Math.hypot(n.vx, n.vy, n.vz);
     if (spd > 1.0) { n.vx /= spd; n.vy /= spd; n.vz /= spd; }
-    n.wx += n.vx; n.wy += n.vy; n.wz += n.vz;
+    n.wx += n.vx * damp; n.wy += n.vy * damp; n.wz += n.vz * damp;
     const r = Math.hypot(n.wx, n.wy, n.wz);
     if (r > sR * 1.35) {
       const f = (r - sR * 1.35) * 0.04 / r;
