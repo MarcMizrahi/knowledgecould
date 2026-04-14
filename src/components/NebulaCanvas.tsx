@@ -6,16 +6,10 @@ import { X, MessageCircle, Search, Trash2, Plus, RefreshCw } from "lucide-react"
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
-const SOURCE_GLOW: Record<string, [number, number, number]> = {
-  pdf:      [239, 68,  68],
-  text:     [148, 163, 184],
-  markdown: [96,  165, 250],
-  docx:     [99,  102, 241],
-  url:      [52,  211, 153],
-  note:     [251, 191, 36],
-};
-const TAG_COLOR: [number, number, number] = [167, 139, 250];
-const DEF_COLOR: [number, number, number] = [148, 163, 184];
+// All knowledge points: soft blue. Tags (topics): warm gold.
+const DOC_COLOR: [number, number, number] = [96, 165, 250];
+const TAG_COLOR: [number, number, number] = [251, 191, 36];
+const DEF_COLOR: [number, number, number] = [96, 165, 250];
 
 // ── 3-D maths ─────────────────────────────────────────────────────────────────
 
