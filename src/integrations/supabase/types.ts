@@ -56,6 +56,7 @@ export type Database = {
           content_preview: string | null
           created_at: string
           id: string
+          source_feed_id: string | null
           source_path: string | null
           source_type: string
           tags: string[] | null
@@ -68,6 +69,7 @@ export type Database = {
           content_preview?: string | null
           created_at?: string
           id?: string
+          source_feed_id?: string | null
           source_path?: string | null
           source_type: string
           tags?: string[] | null
@@ -80,11 +82,53 @@ export type Database = {
           content_preview?: string | null
           created_at?: string
           id?: string
+          source_feed_id?: string | null
           source_path?: string | null
           source_type?: string
           tags?: string[] | null
           title?: string
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_source_feed_id_fkey"
+            columns: ["source_feed_id"]
+            isOneToOne: false
+            referencedRelation: "feeds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feeds: {
+        Row: {
+          article_count: number
+          created_at: string
+          id: string
+          is_active: boolean
+          last_fetched_at: string | null
+          title: string | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          article_count?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_fetched_at?: string | null
+          title?: string | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          article_count?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_fetched_at?: string | null
+          title?: string | null
+          updated_at?: string
+          url?: string
         }
         Relationships: []
       }
