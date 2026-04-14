@@ -223,7 +223,7 @@ export async function ingestURL(
   };
 }
 
-// ── Semantic Search (via edge function + embeddings) ──
+// ── Semantic Search (via edge function + AI re-ranking) ──
 
 export async function semanticSearch(
   query: string,
@@ -236,17 +236,6 @@ export async function semanticSearch(
 
   if (error) throw new Error(error.message || "Search failed");
   return data as { query: string; results: SearchHit[] };
-}
-
-// ── Embed document chunks (call after ingestion) ──
-
-export async function embedDocument(docId: string): Promise<void> {
-  const { error } = await supabase.functions.invoke("embed", {
-    body: { doc_id: docId },
-  });
-  if (error) {
-    console.error("Embedding failed:", error.message);
-  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
