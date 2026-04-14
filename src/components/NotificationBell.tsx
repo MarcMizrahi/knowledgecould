@@ -39,8 +39,9 @@ export default function NotificationBell() {
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   useEffect(() => {
+    const channelName = `notifications-bell-${Date.now()}`;
     const channel = supabase
-      .channel("notifications-bell")
+      .channel(channelName)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, (payload) => {
         setNotifications((prev) => [payload.new as Notification, ...prev].slice(0, 30));
       })
