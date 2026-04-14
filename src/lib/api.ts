@@ -105,8 +105,7 @@ export async function ingestNote(
     content,
   });
 
-  // Trigger embedding in background
-  embedDocument(data.id).catch(() => {});
+
 
   return {
     id: data.id,
@@ -176,8 +175,7 @@ export async function uploadFile(
       .eq("id", data.id);
   }
 
-  // Trigger embedding in background
-  embedDocument(data.id).catch(() => {});
+
 
   return {
     id: data.id,
