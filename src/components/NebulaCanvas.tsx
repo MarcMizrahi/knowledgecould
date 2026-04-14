@@ -911,7 +911,7 @@ export default function NebulaCanvas() {
                 <Link to="/chat" search={{ doc: selectedNode.doc.id }} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary/20 border border-primary/30 text-primary text-xs hover:bg-primary/30 transition-colors">
                   <MessageCircle size={11} /> Chat
                 </Link>
-                <Link to="/search" search={{ doc: selectedNode.doc.id }} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-nebula-blue/20 border border-nebula-blue/30 text-nebula-blue text-xs hover:bg-nebula-blue/30 transition-colors">
+                <Link to="/search" search={{ q: selectedNode.doc.title }} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-nebula-blue/20 border border-nebula-blue/30 text-nebula-blue text-xs hover:bg-nebula-blue/30 transition-colors">
                   <Search size={11} /> Search
                 </Link>
                 <button onClick={() => handleDelete(selectedNode.doc!.id)} disabled={deleting} className="px-2.5 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs hover:bg-destructive/20 transition-colors disabled:opacity-50">
