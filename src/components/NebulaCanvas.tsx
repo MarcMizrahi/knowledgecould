@@ -517,12 +517,17 @@ export default function NebulaCanvas() {
   const rotRef      = useRef<Mat3>([...MAT3_ID] as Mat3);
   const angVelRef   = useRef({ rx: 0, ry: 0.0006 });
   const scaleRef    = useRef(1);
+  const baseScaleRef = useRef(1); // the "overview" scale from rebuild
+  const panRef      = useRef({ x: 0, y: 0 });
   const sphereRRef  = useRef(300);
   const interactRef = useRef<Interaction>({ active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false });
   const holdingTagRef = useRef(false);
   const taxonomyRef  = useRef<{ subtagToSuper: Map<string, string> }>({ subtagToSuper: new Map() });
-  const dampRef     = useRef(1); // 1 = full speed, 0 = stopped
+  const dampRef     = useRef(1);
   const rafRef      = useRef<number>(0);
+  // Zoom-to-cluster animation target
+  const zoomTargetRef = useRef<{ scale: number; panX: number; panY: number } | null>(null);
+  const zoomedClusterRef = useRef<string | null>(null); // supertag label currently zoomed into
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
   const [docs, setDocs]       = useState<KnowledgeDoc[]>([]);
