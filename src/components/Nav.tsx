@@ -1,5 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import NotificationBell from "@/components/NotificationBell";
 
 const links = [
   { href: "/", label: "Knowledge" },
@@ -36,6 +37,7 @@ export default function Nav() {
               {l.label}
             </Link>
           ))}
+          <NotificationBell />
         </nav>
       </div>
     </header>
