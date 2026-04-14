@@ -949,7 +949,7 @@ export default function NebulaCanvas() {
       </div>
 
       {!loading && docs.length > 0 && (
-        <div className="absolute bottom-4 left-4 pointer-events-none">
+        <div className="absolute bottom-4 left-4 pointer-events-none hidden sm:block">
           <p className="text-[11px] text-muted-foreground/50">
             {docs.length} stars · drag to spin · scroll to zoom · click a domain to dive in
           </p>
@@ -957,7 +957,7 @@ export default function NebulaCanvas() {
       )}
 
       {!loading && docs.length > 0 && (
-        <div className="absolute bottom-4 right-4 flex flex-col gap-1 pointer-events-none">
+        <div className="absolute bottom-4 right-4 flex-col gap-1 pointer-events-none hidden sm:flex">
           {[...new Set(docs.map(d => d.source_type))].map(t => (
             <div key={t} className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
               <span>{SOURCE_ICONS[t]}</span><span className="capitalize">{t}</span>
@@ -968,7 +968,7 @@ export default function NebulaCanvas() {
 
       {/* Info panel */}
       {selectedNode && (
-        <div className="absolute top-3 right-3 w-72 glass rounded-xl p-4 flex flex-col gap-3">
+        <div className="absolute top-3 right-3 left-3 sm:left-auto sm:w-72 glass rounded-xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{selectedNode.label}</p>
