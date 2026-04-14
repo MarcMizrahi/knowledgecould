@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { listDocuments, deleteDocument, type KnowledgeDoc } from "@/lib/api";
 import { SOURCE_ICONS, formatDate } from "@/lib/utils";
-import { X, MessageCircle, Search, Trash2, Plus, RefreshCw } from "lucide-react";
+import { X, MessageCircle, Search, Trash2, Plus, RefreshCw, ArrowLeft } from "lucide-react";
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
