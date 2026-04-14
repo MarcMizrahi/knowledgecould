@@ -848,7 +848,7 @@ export default function NebulaCanvas() {
       {!loading && docs.length > 0 && (
         <div className="absolute bottom-4 left-4 pointer-events-none">
           <p className="text-[11px] text-muted-foreground/50">
-            {docs.length} stars · drag to spin · scroll to zoom · click a star to explore
+            {docs.length} stars · drag to spin · scroll to zoom · click a domain to dive in
           </p>
         </div>
       )}
