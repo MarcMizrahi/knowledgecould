@@ -467,6 +467,7 @@ export default function NebulaCanvas() {
     const mx     = e.clientX - rect.left, my = e.clientY - rect.top;
     const node   = nodeAtScreen(mx, my);
     hoverRef.current = node?.id ?? null;
+    holdingTagRef.current = node?.type === "tag";
     interactRef.current = { active: true, nodeId: node?.id ?? null, lastMx: mx, lastMy: my, hasMoved: false };
     canvasRef.current!.style.cursor = node ? "pointer" : "grabbing";
   }, [nodeAtScreen]);
@@ -494,6 +495,7 @@ export default function NebulaCanvas() {
   }, [nodeAtScreen]);
 
   const onPointerUp = useCallback(() => {
+    holdingTagRef.current = false;
     const ix = interactRef.current;
     if (!ix.hasMoved && ix.nodeId) {
       const id    = ix.nodeId;
