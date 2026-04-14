@@ -274,7 +274,7 @@ function paint3D(
     ctx.stroke();
   }
 
-  for (const { n, sx, sy, depth, active } of proj) {
+  for (const { n, sx, sy, depth, active, linked } of proj) {
     const [r, g, b] = n.color;
     const sz  = 0.35 + 0.65 * depth;
     const opa = 0.25 + 0.75 * depth;
