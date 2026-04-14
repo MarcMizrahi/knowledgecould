@@ -1,19 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
+import KnowledgeList from "@/components/KnowledgeList";
 
 export const Route = createFileRoute("/")({
   component: Index,
+  head: () => ({
+    meta: [
+      { title: "Knowledge Nebula — Your AI Knowledge Universe" },
+      { name: "description", content: "AI-powered personal knowledge base. Upload documents, search by meaning, and chat with your knowledge." },
+    ],
+  }),
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+function Index() {
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="nebula-bg min-h-screen">
+      <KnowledgeList />
     </div>
   );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
 }
