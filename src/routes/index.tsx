@@ -13,7 +13,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <div className="nebula-bg h-screen">
+    <div className="nebula-bg h-[calc(100vh-3.5rem)] -mx-4 -mt-8 -mb-8 sm:-mx-4">
       <NebulaCanvas />
     </div>
   );
