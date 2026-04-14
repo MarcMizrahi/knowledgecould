@@ -201,7 +201,7 @@ export default function NotificationBell() {
                           className="text-primary"
                         />
                       ) : (
-                        <Star size={14} className="text-amber-400" />
+                        <Star size={14} className="text-primary" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
