@@ -922,28 +922,14 @@ export default function NebulaCanvas() {
           )}
 
           {(selectedNode.type === "tag" || selectedNode.type === "supertag") && (
-            <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
-              {docs.filter(d => {
-                if (selectedNode.type === "supertag") {
-                  return d.tags.some(t => {
-                    const parent = taxonomyRef.current.subtagToSuper.get(t);
-                    return t === selectedNode.label || parent === selectedNode.label;
-                  });
-                }
-                return d.tags.includes(selectedNode.label);
-              }).map(d => (
-                <button
-                  key={d.id}
-                  onClick={() => {
-                    const n = nodesRef.current.find(x => x.id === `doc:${d.id}`);
-                    if (n) { selectRef.current = n.id; setSelectedNode(n); }
-                  }}
-                  className="text-left text-xs text-muted-foreground hover:text-foreground py-1 px-2 rounded hover:bg-accent/10 transition-colors truncate"
-                >
-                  {SOURCE_ICONS[d.source_type]} {d.title}
-                </button>
-              ))}
-            </div>
+            <TagDocumentList
+              docs={docs}
+              selectedNode={selectedNode}
+              taxonomyRef={taxonomyRef}
+              nodesRef={nodesRef}
+              selectRef={selectRef}
+              setSelectedNode={setSelectedNode}
+            />
           )}
         </div>
       )}
