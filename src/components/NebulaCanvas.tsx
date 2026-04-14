@@ -876,10 +876,17 @@ export default function NebulaCanvas() {
         selectRef.current = newId;
         setSelectedNode(newId ? (node ?? null) : null);
       }
+    } else if (!ix.hasMoved && !ix.nodeId) {
+      // Clicked on empty space — deselect and zoom out if zoomed
+      selectRef.current = null;
+      setSelectedNode(null);
+      if (zoomedClusterRef.current) {
+        zoomOut();
+      }
     }
     interactRef.current = { active: false, nodeId: null, lastMx: 0, lastMy: 0, hasMoved: false };
     if (canvasRef.current) canvasRef.current.style.cursor = "grab";
-  }, [zoomToCluster]);
+  }, [zoomToCluster, zoomOut]);
 
   const onPointerLeave = useCallback(() => {
     if (!interactRef.current.active) hoverRef.current = null;
