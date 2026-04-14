@@ -569,6 +569,7 @@ export default function NebulaCanvas() {
     sphereRRef.current = sR;
     // Auto-zoom out so the whole nebula stays visible
     scaleRef.current = 1 / growthFactor;
+    baseScaleRef.current = 1 / growthFactor;
     const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
     nodesRef.current = nodes;
     edgesRef.current = edges;
