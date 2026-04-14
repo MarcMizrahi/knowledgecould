@@ -59,7 +59,8 @@ function rotY(a: number): Mat3 { const c=Math.cos(a),s=Math.sin(a); return [c,0,
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SimNode {
-  id: string; type: "doc" | "tag"; label: string;
+  id: string; type: "doc" | "tag" | "supertag"; label: string;
+  level: number; // 0 = supertag, 1 = tag, 2 = doc
   wx: number; wy: number; wz: number;
   vx: number; vy: number; vz: number;
   ax: number; ay: number; az: number;
