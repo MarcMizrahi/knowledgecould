@@ -395,8 +395,12 @@ function paint3D(
     const opa = 0.25 + 0.75 * depth;
     const rad = n.radius * sz;
 
-    const glowMult  = active ? 8 : n.type === "tag" ? 6 : 5;
-    const glowAlpha = (active ? 0.6 : n.type === "tag" ? 0.32 : 0.2) * opa;
+    const isSuperTag = n.type === "supertag";
+    const isTag = n.type === "tag";
+    const isTagLike = isSuperTag || isTag;
+
+    const glowMult  = active ? 8 : isSuperTag ? 9 : isTag ? 6 : 5;
+    const glowAlpha = (active ? 0.6 : isSuperTag ? 0.4 : isTag ? 0.32 : 0.2) * opa;
     const gr = n.radius * glowMult * sz;
     const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, gr);
     glow.addColorStop(0,    `rgba(${r},${g},${b},${glowAlpha})`);
@@ -412,24 +416,42 @@ function paint3D(
     ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2);
     ctx.fillStyle = core; ctx.fill();
 
-    if (n.type === "tag") {
-      const s = rad * 2.8;
-      ctx.strokeStyle = `rgba(${r},${g},${b},${0.4 * opa})`;
-      ctx.lineWidth = 0.9;
+    // Crosshair for supertags, smaller cross for subtags
+    if (isSuperTag) {
+      const s = rad * 3.5;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.5 * opa})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sx-s, sy); ctx.lineTo(sx+s, sy);
+      ctx.moveTo(sx, sy-s); ctx.lineTo(sx, sy+s);
+      ctx.stroke();
+      // Orbit ring hint
+      ctx.beginPath();
+      ctx.arc(sx, sy, rad * 4, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.12 * opa})`;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    } else if (isTag) {
+      const s = rad * 2.5;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 * opa})`;
+      ctx.lineWidth = 0.7;
       ctx.beginPath();
       ctx.moveTo(sx-s, sy); ctx.lineTo(sx+s, sy);
       ctx.moveTo(sx, sy-s); ctx.lineTo(sx, sy+s);
       ctx.stroke();
     }
 
-    if (n.type === "tag" || active || linked) {
+    // Labels: always show for supertags, show for tags, show for active/linked docs
+    if (isTagLike || active || linked) {
       const txt = n.label.length > 24 ? n.label.slice(0, 22) + "…" : n.label;
-      const fs  = n.type === "tag" ? 11 : linked ? 10 : 10;
-      ctx.font      = n.type === "tag" ? `bold ${fs}px system-ui,sans-serif` : `${fs}px system-ui,sans-serif`;
+      const fs  = isSuperTag ? 13 : isTag ? 10 : 9;
+      ctx.font      = isSuperTag ? `bold ${fs}px system-ui,sans-serif`
+                     : isTag ? `600 ${fs}px system-ui,sans-serif`
+                     : `${fs}px system-ui,sans-serif`;
       ctx.textAlign = "center";
-      const labelOpa = active ? 1 : linked ? 0.9 : 0.8;
+      const labelOpa = active ? 1 : isSuperTag ? 0.95 : linked ? 0.9 : 0.8;
       ctx.fillStyle = `rgba(${r},${g},${b},${labelOpa * opa})`;
-      ctx.fillText(txt, sx, sy + rad + 13);
+      ctx.fillText(txt, sx, sy + rad + (isSuperTag ? 16 : 13));
     }
   }
 }
