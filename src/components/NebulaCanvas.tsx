@@ -607,7 +607,7 @@ export default function NebulaCanvas() {
     const mx     = e.clientX - rect.left, my = e.clientY - rect.top;
     const node   = nodeAtScreen(mx, my);
     hoverRef.current = node?.id ?? null;
-    holdingTagRef.current = node?.type === "tag";
+    holdingTagRef.current = node?.type === "tag" || node?.type === "supertag";
     interactRef.current = { active: true, nodeId: node?.id ?? null, lastMx: mx, lastMy: my, hasMoved: false };
     canvasRef.current!.style.cursor = node ? "pointer" : "grabbing";
   }, [nodeAtScreen]);
