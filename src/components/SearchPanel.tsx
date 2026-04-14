@@ -1,25 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { semanticSearch, type SearchHit } from "@/lib/api";
 import { cn, SOURCE_COLORS, SOURCE_ICONS } from "@/lib/utils";
 import { Search, Loader2 } from "lucide-react";
 
-export default function SearchPanel() {
-  const [query, setQuery] = useState("");
+interface SearchPanelProps {
+  initialQuery?: string;
+}
+
+export default function SearchPanel({ initialQuery }: SearchPanelProps) {
+  const [query, setQuery] = useState(initialQuery || "");
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState("");
+  const autoSearched = useRef(false);
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
+  // Auto-search when initialQuery is provided
+  useEffect(() => {
+    if (initialQuery && !autoSearched.current) {
+      autoSearched.current = true;
+      setQuery(initialQuery);
+      runSearch(initialQuery);
+    }
+  }, [initialQuery]);
+
+  async function runSearch(q: string) {
+    if (!q.trim()) return;
     setLoading(true);
     try {
-      const { results: hits } = await semanticSearch(query.trim(), 8);
+      const { results: hits } = await semanticSearch(q.trim(), 8);
       setResults(hits);
-      setSearched(query.trim());
+      setSearched(q.trim());
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    runSearch(query);
   }
 
   return (

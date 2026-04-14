@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Bell, Sparkles, Star, Check, RefreshCw, X } from "lucide-react";
+import { Bell, Sparkles, Star, Check, RefreshCw, Search, Rss } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -18,9 +19,9 @@ interface Notification {
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
@@ -30,42 +31,24 @@ export default function NotificationBell() {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(30);
-
-    if (!error && data) {
-      setNotifications(data as Notification[]);
-    }
+    if (!error && data) setNotifications(data as Notification[]);
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
-  // Realtime subscription for new notifications
   useEffect(() => {
     const channel = supabase
       .channel("notifications-bell")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
-          const n = payload.new as Notification;
-          setNotifications((prev) => [n, ...prev].slice(0, 30));
-        }
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, (payload) => {
+        setNotifications((prev) => [payload.new as Notification, ...prev].slice(0, 30));
+      })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Close on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
     };
     if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -73,27 +56,20 @@ export default function NotificationBell() {
 
   const markRead = async (id: string) => {
     await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
   };
 
   const markAllRead = async () => {
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
     if (unreadIds.length === 0) return;
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .in("id", unreadIds);
+    await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 
   const generateRecommendations = async () => {
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("recommend", {
-        body: {},
-      });
+      const { data, error } = await supabase.functions.invoke("recommend", { body: {} });
       if (error) throw error;
       if (data?.recommendations > 0) {
         toast.success(`${data.recommendations} new recommendations generated!`);
@@ -109,17 +85,32 @@ export default function NotificationBell() {
     }
   };
 
+  const handleSearchAction = (n: Notification) => {
+    // Strip emoji prefix for cleaner search
+    const searchQuery = n.title.replace(/^💡\s*/, "").replace(/^New:\s*/, "");
+    if (!n.is_read) markRead(n.id);
+    setOpen(false);
+    navigate({ to: "/search", search: { q: searchQuery } });
+  };
+
+  const handleAddFeed = (n: Notification) => {
+    const tags = (n.metadata?.tags as string[]) || [];
+    const searchTerm = tags.length > 0 ? tags.join(" ") : n.title.replace(/^💡\s*/, "");
+    if (!n.is_read) markRead(n.id);
+    setOpen(false);
+    // Navigate to sources page — user can add a feed there
+    toast.info(`Try adding an RSS feed about "${searchTerm}" in Sources`);
+    navigate({ to: "/sources" });
+  };
+
   const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
+    const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "just now";
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
   };
 
   return (
@@ -149,11 +140,7 @@ export default function NotificationBell() {
                 className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
                 title="Generate new recommendations"
               >
-                {generating ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <Sparkles size={14} />
-                )}
+                {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
               </button>
               {unreadCount > 0 && (
                 <button
@@ -183,11 +170,8 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map((n) => (
-                <button
+                <div
                   key={n.id}
-                  onClick={() => {
-                    if (!n.is_read) markRead(n.id);
-                  }}
                   className={cn(
                     "w-full text-left px-4 py-3 border-b border-border/10 transition-colors hover:bg-accent/10",
                     !n.is_read && "bg-primary/5"
@@ -196,23 +180,16 @@ export default function NotificationBell() {
                   <div className="flex items-start gap-2.5">
                     <div className="mt-0.5 flex-shrink-0">
                       {n.type === "recommendation" ? (
-                        <Sparkles
-                          size={14}
-                          className="text-primary"
-                        />
+                        <Sparkles size={14} className="text-primary" />
                       ) : (
                         <Star size={14} className="text-primary" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          "text-xs leading-snug truncate",
-                          !n.is_read
-                            ? "text-foreground font-medium"
-                            : "text-muted-foreground"
-                        )}
-                      >
+                      <p className={cn(
+                        "text-xs leading-snug truncate",
+                        !n.is_read ? "text-foreground font-medium" : "text-muted-foreground"
+                      )}>
                         {n.title}
                       </p>
                       {n.description && (
@@ -227,22 +204,38 @@ export default function NotificationBell() {
                         {n.metadata?.tags && (
                           <div className="flex gap-1 flex-wrap">
                             {(n.metadata.tags as string[]).slice(0, 3).map((t) => (
-                              <span
-                                key={t}
-                                className="px-1.5 py-0 rounded-full text-[9px] bg-primary/15 text-primary/80"
-                              >
+                              <span key={t} className="px-1.5 py-0 rounded-full text-[9px] bg-primary/15 text-primary/80">
                                 {t}
                               </span>
                             ))}
                           </div>
                         )}
                       </div>
-                      {!n.is_read && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-primary" />
-                      )}
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <button
+                          onClick={() => handleSearchAction(n)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        >
+                          <Search size={10} />
+                          Search related
+                        </button>
+                        {n.type === "recommendation" && (
+                          <button
+                            onClick={() => handleAddFeed(n)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors"
+                          >
+                            <Rss size={10} />
+                            Find feed
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {!n.is_read && (
+                      <div className="mt-1 w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    )}
                   </div>
-                </button>
+                </div>
               ))
             )}
           </div>
