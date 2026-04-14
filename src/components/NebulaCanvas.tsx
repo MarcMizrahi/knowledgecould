@@ -783,7 +783,7 @@ export default function NebulaCanvas() {
               {selectedNode.type === "supertag" && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Domain · {docs.filter(d => d.tags.some(t => {
-                    const parent = CHILD_TO_PARENT.get(t.toLowerCase());
+                    const parent = taxonomyRef.current.subtagToSuper.get(t);
                     return t === selectedNode.label || parent === selectedNode.label;
                   })).length} documents
                 </p>
@@ -831,7 +831,7 @@ export default function NebulaCanvas() {
               {docs.filter(d => {
                 if (selectedNode.type === "supertag") {
                   return d.tags.some(t => {
-                    const parent = CHILD_TO_PARENT.get(t.toLowerCase());
+                    const parent = taxonomyRef.current.subtagToSuper.get(t);
                     return t === selectedNode.label || parent === selectedNode.label;
                   });
                 }
