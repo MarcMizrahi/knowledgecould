@@ -607,16 +607,16 @@ export default function NebulaCanvas() {
     window.addEventListener("resize", resize);
 
     const loop = (t: number) => {
+      // When zoomed into a cluster, freeze all motion (rotation + physics)
+      const isZoomed = zoomedClusterRef.current !== null;
+
       // Dampen when holding a tag node
-      if (holdingTagRef.current) {
-        dampRef.current = Math.max(0, dampRef.current - 0.02);
+      if (holdingTagRef.current || isZoomed) {
+        dampRef.current = Math.max(0, dampRef.current - 0.05);
       } else {
         dampRef.current = Math.min(1, dampRef.current + 0.03);
       }
-      // Also dampen based on zoom level: more zoomed in → slower movement
-      // scale range: 0.2 (zoomed out) to 5 (zoomed in). At scale=1 → full speed, scale=5 → stopped
-      const zoomDamp = Math.max(0, 1 - Math.max(0, scaleRef.current - 1) / 4);
-      const damp = dampRef.current * zoomDamp;
+      const damp = dampRef.current;
 
       const av = angVelRef.current;
       rotRef.current = mul3(rotY(av.ry * damp), rotRef.current);
