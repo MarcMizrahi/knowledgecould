@@ -362,9 +362,15 @@ export default function NebulaCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const w = canvas.offsetWidth, h = canvas.offsetHeight;
-    const sR = Math.min(w, h) * 0.38;
+    const docCount = docsRef.current.length;
+    // Scale sphere radius with document count so the nebula grows organically
+    // Base size from viewport, then expand as more docs are added
+    const baseSR = Math.min(w, h) * 0.38;
+    const growthFactor = docCount <= 5 ? 1 : 1 + Math.log2(docCount / 5) * 0.35;
+    const sR = baseSR * growthFactor;
     sphereRRef.current = sR;
-    scaleRef.current   = 1;
+    // Auto-zoom out so the whole nebula stays visible
+    scaleRef.current = 1 / growthFactor;
     const { nodes, edges } = buildGraph3D(docsRef.current, sR);
     nodesRef.current = nodes;
     edgesRef.current = edges;
