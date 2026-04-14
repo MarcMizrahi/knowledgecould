@@ -6,10 +6,30 @@ import { X, MessageCircle, Search, Trash2, Plus, RefreshCw } from "lucide-react"
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
-// All knowledge points: soft blue. Tags (topics): warm gold.
+// All knowledge points: soft blue. Tags (topics): warm gold spectrum.
 const DOC_COLOR: [number, number, number] = [96, 165, 250];
-const TAG_COLOR: [number, number, number] = [251, 191, 36];
+const SUPERTAG_COLOR: [number, number, number] = [255, 200, 40]; // bright gold for domains
+const TAG_COLOR: [number, number, number] = [251, 191, 36];       // gold for sub-topics
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
+
+// ── Topic hierarchy ──────────────────────────────────────────────────────────
+// Super-tags are large conceptual domains; sub-tags orbit within them.
+const TAXONOMY: Record<string, string[]> = {
+  "philosophy":      ["ethics", "epistemology", "aesthetics", "religion", "mythology"],
+  "science":         ["biology", "physics", "mathematics", "space", "plants"],
+  "technology":      ["AI", "ai", "deep-learning", "neural-networks", "computer-science", "computer-architecture"],
+  "arts":            ["art", "photography", "cinema", "music", "architecture"],
+  "literature":      ["french-literature", "poetry", "linguistics"],
+  "social sciences": ["sociology", "psychology", "economics", "politics", "history", "education", "law", "journalism", "crime"],
+};
+
+// Build reverse lookup: child → parent
+const CHILD_TO_PARENT = new Map<string, string>();
+for (const [parent, children] of Object.entries(TAXONOMY)) {
+  for (const child of children) {
+    CHILD_TO_PARENT.set(child.toLowerCase(), parent);
+  }
+}
 
 // ── 3-D maths ─────────────────────────────────────────────────────────────────
 
