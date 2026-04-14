@@ -39,14 +39,18 @@ export default function NotificationBell() {
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   useEffect(() => {
-    const channelName = `notifications-bell-${Date.now()}`;
-    const channel = supabase
-      .channel(channelName)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, (payload) => {
+    let cancelled = false;
+    const channel = supabase.channel(`notif-${crypto.randomUUID()}`);
+    channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, (payload) => {
+      if (!cancelled) {
         setNotifications((prev) => [payload.new as Notification, ...prev].slice(0, 30));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      }
+    });
+    channel.subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
