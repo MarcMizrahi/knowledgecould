@@ -419,7 +419,10 @@ export default function NebulaCanvas() {
       } else {
         dampRef.current = Math.min(1, dampRef.current + 0.03);
       }
-      const damp = dampRef.current;
+      // Also dampen based on zoom level: more zoomed in → slower movement
+      // scale range: 0.2 (zoomed out) to 5 (zoomed in). At scale=1 → full speed, scale=5 → stopped
+      const zoomDamp = Math.max(0, 1 - Math.max(0, scaleRef.current - 1) / 4);
+      const damp = dampRef.current * zoomDamp;
 
       const av = angVelRef.current;
       rotRef.current = mul3(rotY(av.ry * damp), rotRef.current);
