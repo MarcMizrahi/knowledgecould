@@ -302,7 +302,8 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 }
 
 function buildDust(w: number, h: number): Dust[] {
-  return Array.from({ length: 140 }, () => ({
+  const count = w < 500 ? 60 : 140;
+  return Array.from({ length: count }, () => ({
     x: Math.random() * w, y: Math.random() * h,
     r: Math.random() * 1.1 + 0.2,
     alpha: Math.random() * 0.3 + 0.04,
@@ -656,17 +657,25 @@ export default function NebulaCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const w = canvas.offsetWidth, h = canvas.offsetHeight;
+    const isMobile = w < 500;
     const docCount = docsRef.current.length;
     // Scale sphere radius with document count so the nebula grows organically
-    // Base size from viewport, then expand as more docs are added
-    const baseSR = Math.min(w, h) * 0.38;
+    // On mobile, use a smaller base to keep everything visible
+    const baseSR = Math.min(w, h) * (isMobile ? 0.30 : 0.38);
     const growthFactor = docCount <= 5 ? 1 : 1 + Math.log2(docCount / 5) * 0.35;
     const sR = baseSR * growthFactor;
     sphereRRef.current = sR;
     // Auto-zoom out so the whole nebula stays visible
-    scaleRef.current = 1 / growthFactor;
-    baseScaleRef.current = 1 / growthFactor;
+    const baseScale = (isMobile ? 0.85 : 1) / growthFactor;
+    scaleRef.current = baseScale;
+    baseScaleRef.current = baseScale;
     const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
+    // Scale down node radii on mobile for less overlap
+    if (isMobile) {
+      for (const n of nodes) {
+        n.radius = n.radius * 0.75;
+      }
+    }
     nodesRef.current = nodes;
     edgesRef.current = edges;
     taxonomyRef.current = { subtagToSuper: st };
@@ -715,9 +724,11 @@ export default function NebulaCanvas() {
       const damp = dampRef.current;
 
       const av = angVelRef.current;
+      const isMobileView = (canvasRef.current?.offsetWidth ?? 800) < 500;
+      const idleSpeed = isMobileView ? 0.0003 : 0.0006;
       rotRef.current = mul3(rotY(av.ry * damp), rotRef.current);
       rotRef.current = mul3(rotX(av.rx * damp), rotRef.current);
-      av.ry = av.ry * 0.96 + 0.0006 * (1 - Math.abs(av.ry) * 50);
+      av.ry = av.ry * 0.96 + idleSpeed * (1 - Math.abs(av.ry) * 50);
       av.rx *= 0.94;
 
       step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
