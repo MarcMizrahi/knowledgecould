@@ -740,6 +740,14 @@ export default function NebulaCanvas() {
         scaleRef.current += (zt.scale - scaleRef.current) * lerp;
         panRef.current.x += (zt.panX - panRef.current.x) * lerp;
         panRef.current.y += (zt.panY - panRef.current.y) * lerp;
+        // Clear target once close enough so manual zoom works again
+        if (
+          Math.abs(zt.scale - scaleRef.current) < 0.001 &&
+          Math.abs(zt.panX - panRef.current.x) < 0.5 &&
+          Math.abs(zt.panY - panRef.current.y) < 0.5
+        ) {
+          zoomTargetRef.current = null;
+        }
       }
 
       // Compute linked node IDs for the selected node
