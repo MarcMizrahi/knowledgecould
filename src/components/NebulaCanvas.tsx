@@ -302,7 +302,8 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 }
 
 function buildDust(w: number, h: number): Dust[] {
-  return Array.from({ length: 140 }, () => ({
+  const count = w < 500 ? 60 : 140;
+  return Array.from({ length: count }, () => ({
     x: Math.random() * w, y: Math.random() * h,
     r: Math.random() * 1.1 + 0.2,
     alpha: Math.random() * 0.3 + 0.04,
