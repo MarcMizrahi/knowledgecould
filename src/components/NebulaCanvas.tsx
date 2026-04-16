@@ -665,8 +665,11 @@ export default function NebulaCanvas() {
     const growthFactor = docCount <= 5 ? 1 : 1 + Math.log2(docCount / 5) * 0.35;
     const sR = baseSR * growthFactor;
     sphereRRef.current = sR;
-    // Auto-zoom out so the whole nebula stays visible
-    const baseScale = (isMobile ? 0.85 : 1) / growthFactor;
+    // Auto-fit: choose scale so the nebula sphere (with ~1.35x outer bound)
+    // fills the viewport with a small margin. This ensures it's zoomed in
+    // to fit the page on load regardless of doc count or screen size.
+    const targetFill = Math.min(w, h) * (isMobile ? 0.46 : 0.48);
+    const baseScale = targetFill / (sR * 1.35);
     scaleRef.current = baseScale;
     baseScaleRef.current = baseScale;
     const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
