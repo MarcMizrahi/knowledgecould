@@ -300,11 +300,23 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     }
   });
 
-  // 5. Light cross-links between docs sharing tags (but fewer to avoid clutter)
+  // 5. Light cross-links between docs sharing tags. Keep this cheap: with 1000+
+  // docs the original loop produced tens of thousands of weak edges, which
+  // dominated both physics and the renderer. Scale the window down as the
+  // graph grows so the visual density stays roughly constant.
+  const crossWindow = docs.length > 400 ? 6 : docs.length > 150 ? 12 : 24;
   for (let i = 0; i < docs.length; i++) {
-    for (let j = i + 1; j < Math.min(docs.length, i + 30); j++) {
-      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
-        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.35, false);
+    const a = docs[i];
+    if (!a.tags.length) continue;
+    const aTags = new Set(a.tags);
+    const limit = Math.min(docs.length, i + 1 + crossWindow);
+    for (let j = i + 1; j < limit; j++) {
+      const b = docs[j];
+      let shares = false;
+      for (let k = 0; k < b.tags.length; k++) {
+        if (aTags.has(b.tags[k])) { shares = true; break; }
+      }
+      if (shares) addEdge(`doc:${a.id}`, `doc:${b.id}`, sR * 0.35, false);
     }
   }
 
