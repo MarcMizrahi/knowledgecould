@@ -159,6 +159,8 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   const nodes: SimNode[] = [];
   const edgeSet = new Set<string>();
   const edges: SimEdge[] = [];
+  // O(1) lookup of nodes by id during the build (avoids repeated O(n) `nodes.find`)
+  const nodeById = new Map<string, SimNode>();
 
   const addEdge = (a: string, b: string, rest: number, strong: boolean) => {
     const k = [a, b].sort().join("|");
@@ -184,12 +186,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     const rad = sR * 0.35;
     const id = `supertag:${st}`;
     nodeIds.set(st, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "supertag", label: st, level: 0,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 12, color: SUPERTAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
   });
 
   // Connect supertags to each other weakly (spread them apart)
@@ -206,7 +210,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   allSubtags.forEach(([tag, parentName], i) => {
     const parentId = nodeIds.get(parentName);
-    const parentNode = parentId ? nodes.find(n => n.id === parentId) : null;
+    const parentNode = parentId ? nodeById.get(parentId) ?? null : null;
     const offset = phi_g * i;
     const spread = sR * 0.2;
     const px = parentNode ? parentNode.wx : 0;
@@ -215,14 +219,16 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
     const id = `tag:${tag}`;
     nodeIds.set(tag, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "tag", label: tag, level: 1,
       wx: px + Math.cos(offset) * spread,
       wy: py + Math.sin(offset * 0.7) * spread * 0.5,
       wz: pz + Math.sin(offset) * spread,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 7, color: TAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
 
     // Strong edge to parent supertag
     if (parentId) addEdge(id, parentId, sR * 0.25, true);
@@ -237,12 +243,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
     const id = `tag:${tag}`;
     nodeIds.set(tag, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "tag", label: tag, level: 1,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 7, color: TAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
   });
 
   // 4. Create document nodes (level 2) — small blue, near their most specific tag
@@ -254,7 +262,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     for (const tag of doc.tags) {
       const tid = nodeIds.get(tag);
       if (!tid) continue;
-      const tnode = nodes.find(n => n.id === tid);
+      const tnode = nodeById.get(tid);
       if (!tnode) continue;
       // Prefer subtags (level 1 with parent) over supertags
       if (!bestNode || (tnode.type === "tag" && bestNode.type === "supertag")) {
@@ -270,7 +278,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     const pz = bestNode ? bestNode.wz : 0;
 
     const id = `doc:${doc.id}`;
-    nodes.push({
+    const node: SimNode = {
       id, type: "doc", label: doc.title, level: 2,
       wx: px + Math.cos(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
       wy: py + Math.sin(offset * 1.3) * spread * 0.4,
@@ -281,7 +289,9 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
       ax: 0, ay: 0, az: 0,
       radius: 4 + Math.min(doc.chunk_count / 10, 4),
       color: DOC_COLOR, doc,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
 
     // Connect doc to all its tags
     for (const tag of doc.tags) {
