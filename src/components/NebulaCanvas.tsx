@@ -823,7 +823,11 @@ export default function NebulaCanvas() {
       av.ry = av.ry * 0.96 + idleSpeed * (1 - Math.abs(av.ry) * 50);
       av.rx *= 0.94;
 
-      step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+      // Skip the physics step entirely once damped to zero (zoomed-in or held).
+      // It would only add tiny jitter and burns CPU on large graphs.
+      if (damp > 0.001) {
+        step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+      }
 
       // Animate camera toward zoom target
       const zt = zoomTargetRef.current;
@@ -863,6 +867,17 @@ export default function NebulaCanvas() {
     };
     rafRef.current = requestAnimationFrame(loop);
 
+    // Pause the animation loop while the tab is hidden — saves CPU/RAM in the
+    // background and avoids piling up rAF work that fires on focus return.
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafRef.current);
+      } else {
+        rafRef.current = requestAnimationFrame(loop);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -901,6 +916,7 @@ export default function NebulaCanvas() {
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
