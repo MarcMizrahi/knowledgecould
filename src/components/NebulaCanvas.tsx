@@ -613,17 +613,22 @@ function TagDocumentList({
 }) {
   const [filter, setFilter] = useState("");
 
-  const filteredDocs = docs
-    .filter((d) => {
-      if (selectedNode.type === "supertag") {
-        return d.tags.some((t) => {
-          const parent = taxonomyRef.current.subtagToSuper.get(t);
-          return t === selectedNode.label || parent === selectedNode.label;
-        });
+  // Compute the cluster's docs once, then narrow by the filter input.
+  const subtagToSuper = taxonomyRef.current.subtagToSuper;
+  const clusterDocs = docs.filter((d) => {
+    if (selectedNode.type === "supertag") {
+      for (const t of d.tags) {
+        if (t === selectedNode.label) return true;
+        if (subtagToSuper.get(t) === selectedNode.label) return true;
       }
-      return d.tags.includes(selectedNode.label);
-    })
-    .filter((d) => !filter || d.title.toLowerCase().includes(filter.toLowerCase()));
+      return false;
+    }
+    return d.tags.includes(selectedNode.label);
+  });
+  const filterLc = filter.toLowerCase();
+  const filteredDocs = filter
+    ? clusterDocs.filter((d) => d.title.toLowerCase().includes(filterLc))
+    : clusterDocs;
 
   // Group by source type for better readability
   const grouped = new Map<string, KnowledgeDoc[]>();
@@ -640,15 +645,7 @@ function TagDocumentList({
           {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
         </p>
       </div>
-      {docs.filter((d) => {
-        if (selectedNode.type === "supertag") {
-          return d.tags.some((t) => {
-            const parent = taxonomyRef.current.subtagToSuper.get(t);
-            return t === selectedNode.label || parent === selectedNode.label;
-          });
-        }
-        return d.tags.includes(selectedNode.label);
-      }).length > 5 && (
+      {clusterDocs.length > 5 && (
         <input
           type="text"
           value={filter}
