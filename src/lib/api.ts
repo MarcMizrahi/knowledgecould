@@ -35,13 +35,23 @@ export interface Stats {
 // ── Documents ────────────────────────────────────────────────────────────
 
 export async function listDocuments(): Promise<KnowledgeDoc[]> {
-  const { data, error } = await supabase
-    .from("documents")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data || []).map((d) => ({
+  // Paginate to bypass Supabase's default 1000-row cap
+  const pageSize = 1000;
+  let from = 0;
+  const all: any[] = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all.map((d) => ({
     id: d.id,
     title: d.title,
     source_type: d.source_type as SourceType,
@@ -54,20 +64,36 @@ export async function listDocuments(): Promise<KnowledgeDoc[]> {
 }
 
 export async function getStats(): Promise<Stats> {
-  const { data: docs, error } = await supabase
+  // Use exact count to avoid the 1000-row default cap
+  const { count: docCount, error: docErr } = await supabase
     .from("documents")
-    .select("source_type");
+    .select("*", { count: "exact", head: true });
+  if (docErr) throw new Error(docErr.message);
 
-  if (error) throw new Error(error.message);
+  // Fetch source_types via pagination
+  const pageSize = 1000;
+  let from = 0;
+  const types: string[] = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("source_type")
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    types.push(...data.map((d) => d.source_type));
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
 
   const { count } = await supabase
     .from("chunks")
     .select("*", { count: "exact", head: true });
 
   return {
-    document_count: docs?.length || 0,
+    document_count: docCount || 0,
     chunk_count: count || 0,
-    source_types: [...new Set(docs?.map((d) => d.source_type) || [])],
+    source_types: [...new Set(types)],
   };
 }
 
