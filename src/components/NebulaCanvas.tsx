@@ -159,6 +159,8 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   const nodes: SimNode[] = [];
   const edgeSet = new Set<string>();
   const edges: SimEdge[] = [];
+  // O(1) lookup of nodes by id during the build (avoids repeated O(n) `nodes.find`)
+  const nodeById = new Map<string, SimNode>();
 
   const addEdge = (a: string, b: string, rest: number, strong: boolean) => {
     const k = [a, b].sort().join("|");
@@ -184,12 +186,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     const rad = sR * 0.35;
     const id = `supertag:${st}`;
     nodeIds.set(st, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "supertag", label: st, level: 0,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 12, color: SUPERTAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
   });
 
   // Connect supertags to each other weakly (spread them apart)
@@ -206,7 +210,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   allSubtags.forEach(([tag, parentName], i) => {
     const parentId = nodeIds.get(parentName);
-    const parentNode = parentId ? nodes.find(n => n.id === parentId) : null;
+    const parentNode = parentId ? nodeById.get(parentId) ?? null : null;
     const offset = phi_g * i;
     const spread = sR * 0.2;
     const px = parentNode ? parentNode.wx : 0;
@@ -215,14 +219,16 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
     const id = `tag:${tag}`;
     nodeIds.set(tag, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "tag", label: tag, level: 1,
       wx: px + Math.cos(offset) * spread,
       wy: py + Math.sin(offset * 0.7) * spread * 0.5,
       wz: pz + Math.sin(offset) * spread,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 7, color: TAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
 
     // Strong edge to parent supertag
     if (parentId) addEdge(id, parentId, sR * 0.25, true);
@@ -237,12 +243,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
     const id = `tag:${tag}`;
     nodeIds.set(tag, id);
-    nodes.push({
+    const node: SimNode = {
       id, type: "tag", label: tag, level: 1,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
       radius: 7, color: TAG_COLOR,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
   });
 
   // 4. Create document nodes (level 2) — small blue, near their most specific tag
@@ -254,7 +262,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     for (const tag of doc.tags) {
       const tid = nodeIds.get(tag);
       if (!tid) continue;
-      const tnode = nodes.find(n => n.id === tid);
+      const tnode = nodeById.get(tid);
       if (!tnode) continue;
       // Prefer subtags (level 1 with parent) over supertags
       if (!bestNode || (tnode.type === "tag" && bestNode.type === "supertag")) {
@@ -270,7 +278,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     const pz = bestNode ? bestNode.wz : 0;
 
     const id = `doc:${doc.id}`;
-    nodes.push({
+    const node: SimNode = {
       id, type: "doc", label: doc.title, level: 2,
       wx: px + Math.cos(offset) * spread + (Math.random() - 0.5) * spread * 0.5,
       wy: py + Math.sin(offset * 1.3) * spread * 0.4,
@@ -281,7 +289,9 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
       ax: 0, ay: 0, az: 0,
       radius: 4 + Math.min(doc.chunk_count / 10, 4),
       color: DOC_COLOR, doc,
-    });
+    };
+    nodes.push(node);
+    nodeById.set(id, node);
 
     // Connect doc to all its tags
     for (const tag of doc.tags) {
@@ -290,11 +300,23 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
     }
   });
 
-  // 5. Light cross-links between docs sharing tags (but fewer to avoid clutter)
+  // 5. Light cross-links between docs sharing tags. Keep this cheap: with 1000+
+  // docs the original loop produced tens of thousands of weak edges, which
+  // dominated both physics and the renderer. Scale the window down as the
+  // graph grows so the visual density stays roughly constant.
+  const crossWindow = docs.length > 400 ? 6 : docs.length > 150 ? 12 : 24;
   for (let i = 0; i < docs.length; i++) {
-    for (let j = i + 1; j < Math.min(docs.length, i + 30); j++) {
-      if (docs[i].tags.some(t2 => docs[j].tags.includes(t2)))
-        addEdge(`doc:${docs[i].id}`, `doc:${docs[j].id}`, sR * 0.35, false);
+    const a = docs[i];
+    if (!a.tags.length) continue;
+    const aTags = new Set(a.tags);
+    const limit = Math.min(docs.length, i + 1 + crossWindow);
+    for (let j = i + 1; j < limit; j++) {
+      const b = docs[j];
+      let shares = false;
+      for (let k = 0; k < b.tags.length; k++) {
+        if (aTags.has(b.tags[k])) { shares = true; break; }
+      }
+      if (shares) addEdge(`doc:${a.id}`, `doc:${b.id}`, sR * 0.35, false);
     }
   }
 
@@ -314,51 +336,118 @@ function buildDust(w: number, h: number): Dust[] {
 
 // ── Physics (3-D) ─────────────────────────────────────────────────────────────
 
-function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
-  const map = new Map(nodes.map(n => [n.id, n]));
-  nodes.forEach(n => { n.ax = 0; n.ay = 0; n.az = 0; });
+// Reusable node-id → node map. Rebuilt only when the node list identity changes.
+let _stepMap: Map<string, SimNode> | null = null;
+let _stepMapKey: SimNode[] | null = null;
+function getNodeMap(nodes: SimNode[]): Map<string, SimNode> {
+  if (_stepMapKey !== nodes || !_stepMap) {
+    _stepMap = new Map(nodes.map(n => [n.id, n]));
+    _stepMapKey = nodes;
+  }
+  return _stepMap;
+}
 
-  for (const e of edges) {
+// Spatial-hash repulsion: bucket nodes into a 3-D grid sized by the largest
+// repulsion radius so each node only checks neighbors in its own + adjacent
+// cells. Turns pairwise O(n²) into ~O(n) for sparse layouts.
+function applyRepulsion(nodes: SimNode[]) {
+  const N = nodes.length;
+  if (N < 2) return;
+
+  // Cell size: covers the maximum interaction distance (max radius pair + 18).
+  // 4 (doc-doc) → mn ≈ 58; 12+12 (super-super) → mn ≈ 138. Use 80 as a balance.
+  const CELL = 80;
+  const grid = new Map<number, SimNode[]>();
+  const key = (ix: number, iy: number, iz: number) =>
+    ((ix + 1024) * 4096 + (iy + 1024)) * 4096 + (iz + 1024);
+
+  for (let i = 0; i < N; i++) {
+    const n = nodes[i];
+    const ix = Math.floor(n.wx / CELL);
+    const iy = Math.floor(n.wy / CELL);
+    const iz = Math.floor(n.wz / CELL);
+    const k = key(ix, iy, iz);
+    let bucket = grid.get(k);
+    if (!bucket) { bucket = []; grid.set(k, bucket); }
+    bucket.push(n);
+  }
+
+  // For each node, look at its 27 neighbor cells (incl. own) but only push
+  // against nodes with a higher index to avoid double-counting.
+  // We tag nodes with a temporary index for the duration of this call.
+  for (let i = 0; i < N; i++) (nodes[i] as any)._i = i;
+
+  for (let i = 0; i < N; i++) {
+    const a = nodes[i];
+    const ix = Math.floor(a.wx / CELL);
+    const iy = Math.floor(a.wy / CELL);
+    const iz = Math.floor(a.wz / CELL);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get(key(ix + dx, iy + dy, iz + dz));
+          if (!bucket) continue;
+          for (let bi = 0; bi < bucket.length; bi++) {
+            const b = bucket[bi];
+            if ((b as any)._i <= i) continue;
+            const ddx = b.wx - a.wx, ddy = b.wy - a.wy, ddz = b.wz - a.wz;
+            const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz) || 0.001;
+            const mn = (a.radius + b.radius) * 5 + 18;
+            if (d < mn) {
+              const f = ((mn - d) / mn) * 0.4 / d;
+              a.ax -= ddx*f; a.ay -= ddy*f; a.az -= ddz*f;
+              b.ax += ddx*f; b.ay += ddy*f; b.az += ddz*f;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
+  const map = getNodeMap(nodes);
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    n.ax = 0; n.ay = 0; n.az = 0;
+  }
+
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
     const a = map.get(e.source), b = map.get(e.target);
     if (!a || !b) continue;
-    const dx = b.wx-a.wx, dy = b.wy-a.wy, dz = b.wz-a.wz;
-    const d  = Math.hypot(dx, dy, dz) || 0.001;
-    const f  = (d - e.restLength) * 0.003 / d;
+    const dx = b.wx - a.wx, dy = b.wy - a.wy, dz = b.wz - a.wz;
+    const d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 0.001;
+    const f = (d - e.restLength) * 0.003 / d;
     a.ax += dx*f; a.ay += dy*f; a.az += dz*f;
     b.ax -= dx*f; b.ay -= dy*f; b.az -= dz*f;
   }
 
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i], b = nodes[j];
-      const dx = b.wx-a.wx, dy = b.wy-a.wy, dz = b.wz-a.wz;
-      const d  = Math.hypot(dx, dy, dz) || 0.001;
-      const mn = (a.radius + b.radius) * 5 + 18;
-      if (d < mn) {
-        const f = ((mn-d)/mn) * 0.4 / d;
-        a.ax -= dx*f; a.ay -= dy*f; a.az -= dz*f;
-        b.ax += dx*f; b.ay += dy*f; b.az += dz*f;
-      }
-    }
-  }
+  applyRepulsion(nodes);
 
-  nodes.forEach(n => {
+  const sRMax = sR * 1.35;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
     n.ax -= n.wx * 0.0003; n.ay -= n.wy * 0.0003; n.az -= n.wz * 0.0003;
-    n.ax += (Math.random()-.5)*.018;
-    n.ay += (Math.random()-.5)*.018;
-    n.az += (Math.random()-.5)*.018;
+    n.ax += (Math.random() - 0.5) * 0.018;
+    n.ay += (Math.random() - 0.5) * 0.018;
+    n.az += (Math.random() - 0.5) * 0.018;
     n.vx = (n.vx + n.ax) * 0.97;
     n.vy = (n.vy + n.ay) * 0.97;
     n.vz = (n.vz + n.az) * 0.97;
-    const spd = Math.hypot(n.vx, n.vy, n.vz);
-    if (spd > 1.0) { n.vx /= spd; n.vy /= spd; n.vz /= spd; }
+    const spd2 = n.vx*n.vx + n.vy*n.vy + n.vz*n.vz;
+    if (spd2 > 1) {
+      const inv = 1 / Math.sqrt(spd2);
+      n.vx *= inv; n.vy *= inv; n.vz *= inv;
+    }
     n.wx += n.vx * damp; n.wy += n.vy * damp; n.wz += n.vz * damp;
-    const r = Math.hypot(n.wx, n.wy, n.wz);
-    if (r > sR * 1.35) {
-      const f = (r - sR * 1.35) * 0.04 / r;
+    const r2 = n.wx*n.wx + n.wy*n.wy + n.wz*n.wz;
+    if (r2 > sRMax * sRMax) {
+      const r = Math.sqrt(r2);
+      const f = (r - sRMax) * 0.04 / r;
       n.vx -= n.wx * f; n.vy -= n.wy * f; n.vz -= n.wz * f;
     }
-  });
+  }
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -524,17 +613,22 @@ function TagDocumentList({
 }) {
   const [filter, setFilter] = useState("");
 
-  const filteredDocs = docs
-    .filter((d) => {
-      if (selectedNode.type === "supertag") {
-        return d.tags.some((t) => {
-          const parent = taxonomyRef.current.subtagToSuper.get(t);
-          return t === selectedNode.label || parent === selectedNode.label;
-        });
+  // Compute the cluster's docs once, then narrow by the filter input.
+  const subtagToSuper = taxonomyRef.current.subtagToSuper;
+  const clusterDocs = docs.filter((d) => {
+    if (selectedNode.type === "supertag") {
+      for (const t of d.tags) {
+        if (t === selectedNode.label) return true;
+        if (subtagToSuper.get(t) === selectedNode.label) return true;
       }
-      return d.tags.includes(selectedNode.label);
-    })
-    .filter((d) => !filter || d.title.toLowerCase().includes(filter.toLowerCase()));
+      return false;
+    }
+    return d.tags.includes(selectedNode.label);
+  });
+  const filterLc = filter.toLowerCase();
+  const filteredDocs = filter
+    ? clusterDocs.filter((d) => d.title.toLowerCase().includes(filterLc))
+    : clusterDocs;
 
   // Group by source type for better readability
   const grouped = new Map<string, KnowledgeDoc[]>();
@@ -551,15 +645,7 @@ function TagDocumentList({
           {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
         </p>
       </div>
-      {docs.filter((d) => {
-        if (selectedNode.type === "supertag") {
-          return d.tags.some((t) => {
-            const parent = taxonomyRef.current.subtagToSuper.get(t);
-            return t === selectedNode.label || parent === selectedNode.label;
-          });
-        }
-        return d.tags.includes(selectedNode.label);
-      }).length > 5 && (
+      {clusterDocs.length > 5 && (
         <input
           type="text"
           value={filter}
@@ -734,7 +820,11 @@ export default function NebulaCanvas() {
       av.ry = av.ry * 0.96 + idleSpeed * (1 - Math.abs(av.ry) * 50);
       av.rx *= 0.94;
 
-      step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+      // Skip the physics step entirely once damped to zero (zoomed-in or held).
+      // It would only add tiny jitter and burns CPU on large graphs.
+      if (damp > 0.001) {
+        step3D(nodesRef.current, edgesRef.current, sphereRRef.current, damp);
+      }
 
       // Animate camera toward zoom target
       const zt = zoomTargetRef.current;
@@ -774,6 +864,17 @@ export default function NebulaCanvas() {
     };
     rafRef.current = requestAnimationFrame(loop);
 
+    // Pause the animation loop while the tab is hidden — saves CPU/RAM in the
+    // background and avoids piling up rAF work that fires on focus return.
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafRef.current);
+      } else {
+        rafRef.current = requestAnimationFrame(loop);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -812,6 +913,7 @@ export default function NebulaCanvas() {
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
