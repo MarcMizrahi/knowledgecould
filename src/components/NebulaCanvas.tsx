@@ -324,51 +324,118 @@ function buildDust(w: number, h: number): Dust[] {
 
 // ── Physics (3-D) ─────────────────────────────────────────────────────────────
 
-function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
-  const map = new Map(nodes.map(n => [n.id, n]));
-  nodes.forEach(n => { n.ax = 0; n.ay = 0; n.az = 0; });
+// Reusable node-id → node map. Rebuilt only when the node list identity changes.
+let _stepMap: Map<string, SimNode> | null = null;
+let _stepMapKey: SimNode[] | null = null;
+function getNodeMap(nodes: SimNode[]): Map<string, SimNode> {
+  if (_stepMapKey !== nodes || !_stepMap) {
+    _stepMap = new Map(nodes.map(n => [n.id, n]));
+    _stepMapKey = nodes;
+  }
+  return _stepMap;
+}
 
-  for (const e of edges) {
+// Spatial-hash repulsion: bucket nodes into a 3-D grid sized by the largest
+// repulsion radius so each node only checks neighbors in its own + adjacent
+// cells. Turns pairwise O(n²) into ~O(n) for sparse layouts.
+function applyRepulsion(nodes: SimNode[]) {
+  const N = nodes.length;
+  if (N < 2) return;
+
+  // Cell size: covers the maximum interaction distance (max radius pair + 18).
+  // 4 (doc-doc) → mn ≈ 58; 12+12 (super-super) → mn ≈ 138. Use 80 as a balance.
+  const CELL = 80;
+  const grid = new Map<number, SimNode[]>();
+  const key = (ix: number, iy: number, iz: number) =>
+    ((ix + 1024) * 4096 + (iy + 1024)) * 4096 + (iz + 1024);
+
+  for (let i = 0; i < N; i++) {
+    const n = nodes[i];
+    const ix = Math.floor(n.wx / CELL);
+    const iy = Math.floor(n.wy / CELL);
+    const iz = Math.floor(n.wz / CELL);
+    const k = key(ix, iy, iz);
+    let bucket = grid.get(k);
+    if (!bucket) { bucket = []; grid.set(k, bucket); }
+    bucket.push(n);
+  }
+
+  // For each node, look at its 27 neighbor cells (incl. own) but only push
+  // against nodes with a higher index to avoid double-counting.
+  // We tag nodes with a temporary index for the duration of this call.
+  for (let i = 0; i < N; i++) (nodes[i] as any)._i = i;
+
+  for (let i = 0; i < N; i++) {
+    const a = nodes[i];
+    const ix = Math.floor(a.wx / CELL);
+    const iy = Math.floor(a.wy / CELL);
+    const iz = Math.floor(a.wz / CELL);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get(key(ix + dx, iy + dy, iz + dz));
+          if (!bucket) continue;
+          for (let bi = 0; bi < bucket.length; bi++) {
+            const b = bucket[bi];
+            if ((b as any)._i <= i) continue;
+            const ddx = b.wx - a.wx, ddy = b.wy - a.wy, ddz = b.wz - a.wz;
+            const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz) || 0.001;
+            const mn = (a.radius + b.radius) * 5 + 18;
+            if (d < mn) {
+              const f = ((mn - d) / mn) * 0.4 / d;
+              a.ax -= ddx*f; a.ay -= ddy*f; a.az -= ddz*f;
+              b.ax += ddx*f; b.ay += ddy*f; b.az += ddz*f;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function step3D(nodes: SimNode[], edges: SimEdge[], sR: number, damp = 1) {
+  const map = getNodeMap(nodes);
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    n.ax = 0; n.ay = 0; n.az = 0;
+  }
+
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
     const a = map.get(e.source), b = map.get(e.target);
     if (!a || !b) continue;
-    const dx = b.wx-a.wx, dy = b.wy-a.wy, dz = b.wz-a.wz;
-    const d  = Math.hypot(dx, dy, dz) || 0.001;
-    const f  = (d - e.restLength) * 0.003 / d;
+    const dx = b.wx - a.wx, dy = b.wy - a.wy, dz = b.wz - a.wz;
+    const d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 0.001;
+    const f = (d - e.restLength) * 0.003 / d;
     a.ax += dx*f; a.ay += dy*f; a.az += dz*f;
     b.ax -= dx*f; b.ay -= dy*f; b.az -= dz*f;
   }
 
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i], b = nodes[j];
-      const dx = b.wx-a.wx, dy = b.wy-a.wy, dz = b.wz-a.wz;
-      const d  = Math.hypot(dx, dy, dz) || 0.001;
-      const mn = (a.radius + b.radius) * 5 + 18;
-      if (d < mn) {
-        const f = ((mn-d)/mn) * 0.4 / d;
-        a.ax -= dx*f; a.ay -= dy*f; a.az -= dz*f;
-        b.ax += dx*f; b.ay += dy*f; b.az += dz*f;
-      }
-    }
-  }
+  applyRepulsion(nodes);
 
-  nodes.forEach(n => {
+  const sRMax = sR * 1.35;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
     n.ax -= n.wx * 0.0003; n.ay -= n.wy * 0.0003; n.az -= n.wz * 0.0003;
-    n.ax += (Math.random()-.5)*.018;
-    n.ay += (Math.random()-.5)*.018;
-    n.az += (Math.random()-.5)*.018;
+    n.ax += (Math.random() - 0.5) * 0.018;
+    n.ay += (Math.random() - 0.5) * 0.018;
+    n.az += (Math.random() - 0.5) * 0.018;
     n.vx = (n.vx + n.ax) * 0.97;
     n.vy = (n.vy + n.ay) * 0.97;
     n.vz = (n.vz + n.az) * 0.97;
-    const spd = Math.hypot(n.vx, n.vy, n.vz);
-    if (spd > 1.0) { n.vx /= spd; n.vy /= spd; n.vz /= spd; }
+    const spd2 = n.vx*n.vx + n.vy*n.vy + n.vz*n.vz;
+    if (spd2 > 1) {
+      const inv = 1 / Math.sqrt(spd2);
+      n.vx *= inv; n.vy *= inv; n.vz *= inv;
+    }
     n.wx += n.vx * damp; n.wy += n.vy * damp; n.wz += n.vz * damp;
-    const r = Math.hypot(n.wx, n.wy, n.wz);
-    if (r > sR * 1.35) {
-      const f = (r - sR * 1.35) * 0.04 / r;
+    const r2 = n.wx*n.wx + n.wy*n.wy + n.wz*n.wz;
+    if (r2 > sRMax * sRMax) {
+      const r = Math.sqrt(r2);
+      const f = (r - sRMax) * 0.04 / r;
       n.vx -= n.wx * f; n.vy -= n.wy * f; n.vz -= n.wz * f;
     }
-  });
+  }
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
