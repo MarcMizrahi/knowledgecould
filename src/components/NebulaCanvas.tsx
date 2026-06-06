@@ -42,6 +42,68 @@ export function tagCssColor(label: string, isSuper = false, alpha = 1): string {
   const [r, g, b] = colorFromLabel(label, isSuper);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+
+// ── Contrast helpers (WCAG) ───────────────────────────────────────────────────
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) * 60; break;
+      case g: h = ((b - r) / d + 2) * 60; break;
+      default: h = ((r - g) / d + 4) * 60;
+    }
+  }
+  return [h, s, l];
+}
+function relLum(r: number, g: number, b: number): number {
+  const f = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
+  const la = relLum(...a), lb = relLum(...b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+/**
+ * Return a color derived from `label` that meets WCAG AA contrast (>=4.5:1)
+ * against the given background by adjusting lightness only — preserves hue
+ * so the topic identity remains recognizable.
+ */
+export function accessibleTagColor(
+  label: string,
+  isSuper: boolean,
+  bg: [number, number, number],
+  targetRatio = 4.5,
+): [number, number, number] {
+  const base = colorFromLabel(label, isSuper);
+  const [h, s] = rgbToHsl(...base);
+  const bgLum = relLum(...bg);
+  // On dark backgrounds we push lightness up; on light backgrounds we push it down.
+  const lightenForDark = bgLum < 0.5;
+  let lo = 0, hi = 1;
+  // binary search on lightness for the closest-to-base color meeting the ratio
+  for (let i = 0; i < 18; i++) {
+    const l = (lo + hi) / 2;
+    const rgb = hslToRgb(h, s, l);
+    const ratio = contrastRatio(rgb, bg);
+    if (ratio >= targetRatio) {
+      // good — try moving back toward base lightness
+      if (lightenForDark) hi = l; else lo = l;
+    } else {
+      if (lightenForDark) lo = l; else hi = l;
+    }
+  }
+  const finalL = lightenForDark ? hi : lo;
+  return hslToRgb(h, s, Math.max(0.05, Math.min(0.95, finalL)));
+}
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
 
 // ── Auto-derived topic hierarchy ──────────────────────────────────────────────
