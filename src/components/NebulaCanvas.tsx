@@ -664,6 +664,8 @@ function TagDialog({
   if (!selectedNode) return null;
   const isSuper = selectedNode.type === "supertag";
   const subtagToSuper = taxonomyRef.current.subtagToSuper;
+  const [tr, tg, tb] = colorFromLabel(selectedNode.label, isSuper);
+  const tagRgb = `${tr},${tg},${tb}`;
 
   const clusterDocs = docs.filter((d) => {
     if (isSuper) {
@@ -696,20 +698,32 @@ function TagDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,48rem)] max-h-[85vh] p-0 overflow-hidden border border-border/40 bg-background/95 backdrop-blur-xl">
         {/* Header band with a soft gold glow for tag identity */}
-        <div className="relative px-6 pt-6 pb-4 border-b border-border/30">
+        <div
+          className="relative px-6 pt-6 pb-4 border-b"
+          style={{ borderColor: `rgba(${tagRgb},0.25)` }}
+        >
           <div
             className="absolute inset-0 pointer-events-none opacity-60"
             style={{
-              background:
-                "radial-gradient(120% 80% at 50% -20%, rgba(255,200,40,0.18), transparent 60%)",
+              background: `radial-gradient(120% 80% at 50% -20%, rgba(${tagRgb},0.22), transparent 60%)`,
             }}
           />
           <div className="relative flex items-start gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-300/30 to-amber-500/10 border border-amber-300/30">
-              <Sparkles size={16} className="text-amber-300" />
+            <div
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border"
+              style={{
+                background: `linear-gradient(135deg, rgba(${tagRgb},0.32), rgba(${tagRgb},0.08))`,
+                borderColor: `rgba(${tagRgb},0.4)`,
+                boxShadow: `0 0 24px rgba(${tagRgb},0.35)`,
+              }}
+            >
+              <Sparkles size={16} style={{ color: `rgb(${tagRgb})` }} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-300/70 font-medium">
+              <p
+                className="text-[10px] uppercase tracking-[0.2em] font-medium"
+                style={{ color: `rgba(${tagRgb},0.85)` }}
+              >
                 {isSuper ? "Domain" : "Topic"}
               </p>
               <DialogTitle className="text-2xl font-display font-bold text-foreground truncate">
