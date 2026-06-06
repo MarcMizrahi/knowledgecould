@@ -728,6 +728,11 @@ function TagDialog({
   const subtagToSuper = taxonomyRef.current.subtagToSuper;
   const [tr, tg, tb] = colorFromLabel(selectedNode.label, isSuper);
   const tagRgb = `${tr},${tg},${tb}`;
+  // Dialog body sits on the app's dark background. Derive a hue-matched
+  // color that meets WCAG AA against it for foreground text/icon use.
+  const DIALOG_BG: [number, number, number] = [15, 16, 24];
+  const [ar, ag, ab] = accessibleTagColor(selectedNode.label, isSuper, DIALOG_BG, 4.5);
+  const accessibleRgb = `${ar},${ag},${ab}`;
 
   const clusterDocs = docs.filter((d) => {
     if (isSuper) {
@@ -780,6 +785,7 @@ function TagDialog({
               }}
             >
               <Sparkles size={16} style={{ color: `rgb(${tagRgb})` }} />
+              {/* Sparkles color is overridden below via accessible variant */}
             </div>
             <div className="flex-1 min-w-0">
               <p
