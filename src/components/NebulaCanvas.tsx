@@ -734,8 +734,8 @@ function TagDialog({
                     {typeDocs.map((d) => (
                       <Link
                         key={d.id}
-                        to="/chat"
-                        search={{ doc: d.id }}
+                        to="/doc/$id"
+                        params={{ id: d.id }}
                         onClick={onClose}
                         className="group relative flex flex-col gap-1.5 p-3 rounded-xl border border-border/40 bg-accent/5 hover:bg-accent/15 hover:border-primary/40 transition-all hover:-translate-y-0.5"
                       >
@@ -755,7 +755,7 @@ function TagDialog({
                             {formatDate(d.created_at)}
                           </p>
                           <span className="text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            <MessageCircle size={10} /> Open
+                            Open →
                           </span>
                         </div>
                       </Link>
