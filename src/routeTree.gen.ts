@@ -14,6 +14,7 @@ import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocIdRouteImport } from './routes/doc.$id'
 
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
@@ -40,6 +41,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocIdRoute = DocIdRouteImport.update({
+  id: '/doc/$id',
+  path: '/doc/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/sources': typeof SourcesRoute
   '/upload': typeof UploadRoute
+  '/doc/$id': typeof DocIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/sources': typeof SourcesRoute
   '/upload': typeof UploadRoute
+  '/doc/$id': typeof DocIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,21 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/sources': typeof SourcesRoute
   '/upload': typeof UploadRoute
+  '/doc/$id': typeof DocIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat' | '/search' | '/sources' | '/upload'
+  fullPaths: '/' | '/chat' | '/search' | '/sources' | '/upload' | '/doc/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat' | '/search' | '/sources' | '/upload'
-  id: '__root__' | '/' | '/chat' | '/search' | '/sources' | '/upload'
+  to: '/' | '/chat' | '/search' | '/sources' | '/upload' | '/doc/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/chat'
+    | '/search'
+    | '/sources'
+    | '/upload'
+    | '/doc/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,6 +93,7 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SourcesRoute: typeof SourcesRoute
   UploadRoute: typeof UploadRoute
+  DocIdRoute: typeof DocIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +133,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/doc/$id': {
+      id: '/doc/$id'
+      path: '/doc/$id'
+      fullPath: '/doc/$id'
+      preLoaderRoute: typeof DocIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -125,6 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SourcesRoute: SourcesRoute,
   UploadRoute: UploadRoute,
+  DocIdRoute: DocIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
