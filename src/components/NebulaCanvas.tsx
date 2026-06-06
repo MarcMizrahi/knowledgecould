@@ -155,7 +155,11 @@ interface Interaction {
 
 // ── Graph ─────────────────────────────────────────────────────────────────────
 
-function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string> } {
+function buildGraph3D(
+  docs: KnowledgeDoc[],
+  sR: number,
+  expandedSupertag: string | null = null,
+): { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string> } {
   const nodes: SimNode[] = [];
   const edgeSet = new Set<string>();
   const edges: SimEdge[] = [];
@@ -173,6 +177,16 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   // 1. Auto-derive the topic hierarchy from tag co-occurrence
   const { supertagNames, subtagToSuper, orphanTags } = deriveTaxonomy(docs);
+
+  // Decide which docs (stars) to materialise as nodes. By default we render
+  // only the topic skeleton (supertags + tags). When the user dives into a
+  // supertag cluster we materialise just its docs. This keeps the working
+  // set small for very large libraries.
+  const visibleDocs: KnowledgeDoc[] = expandedSupertag
+    ? docs.filter(d =>
+        d.tags.some(t => t === expandedSupertag || subtagToSuper.get(t) === expandedSupertag),
+      )
+    : [];
 
   const nodeIds = new Map<string, string>(); // tag/supertag name → node id
 
@@ -254,8 +268,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   });
 
   // 4. Create document nodes (level 2) — small blue, near their most specific tag
-  const N = Math.max(docs.length, 1);
-  docs.forEach((doc, i) => {
+  visibleDocs.forEach((doc, i) => {
     // Find the most specific tag this doc has (prefer subtag over supertag)
     let bestTagId: string | null = null;
     let bestNode: SimNode | null = null;
@@ -304,14 +317,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   // docs the original loop produced tens of thousands of weak edges, which
   // dominated both physics and the renderer. Scale the window down as the
   // graph grows so the visual density stays roughly constant.
-  const crossWindow = docs.length > 400 ? 6 : docs.length > 150 ? 12 : 24;
-  for (let i = 0; i < docs.length; i++) {
-    const a = docs[i];
+  const crossWindow = visibleDocs.length > 400 ? 6 : visibleDocs.length > 150 ? 12 : 24;
+  for (let i = 0; i < visibleDocs.length; i++) {
+    const a = visibleDocs[i];
     if (!a.tags.length) continue;
     const aTags = new Set(a.tags);
-    const limit = Math.min(docs.length, i + 1 + crossWindow);
+    const limit = Math.min(visibleDocs.length, i + 1 + crossWindow);
     for (let j = i + 1; j < limit; j++) {
-      const b = docs[j];
+      const b = visibleDocs[j];
       let shares = false;
       for (let k = 0; k < b.tags.length; k++) {
         if (aTags.has(b.tags[k])) { shares = true; break; }
