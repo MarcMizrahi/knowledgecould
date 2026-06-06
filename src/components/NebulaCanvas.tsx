@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { listDocuments, deleteDocument, type KnowledgeDoc } from "@/lib/api";
 import { SOURCE_ICONS, formatDate } from "@/lib/utils";
-import { X, MessageCircle, Search, Trash2, Plus, RefreshCw, ArrowLeft } from "lucide-react";
+import { X, MessageCircle, Search, Trash2, Plus, RefreshCw, ArrowLeft, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
@@ -607,29 +608,34 @@ function paint3D(
   }
 }
 
-// ── Tag Document List ──────────────────────────────────────────────────────────
+// ── Tag / Supertag Dialog ─────────────────────────────────────────────────────
 
-function TagDocumentList({
-  docs,
+function TagDialog({
+  open,
+  onClose,
   selectedNode,
+  docs,
   taxonomyRef,
-  nodesRef,
-  selectRef,
-  setSelectedNode,
 }: {
+  open: boolean;
+  onClose: () => void;
+  selectedNode: SimNode | null;
   docs: KnowledgeDoc[];
-  selectedNode: SimNode;
   taxonomyRef: React.MutableRefObject<{ subtagToSuper: Map<string, string> }>;
-  nodesRef: React.MutableRefObject<SimNode[]>;
-  selectRef: React.MutableRefObject<string | null>;
-  setSelectedNode: (n: SimNode | null) => void;
 }) {
   const [filter, setFilter] = useState("");
 
-  // Compute the cluster's docs once, then narrow by the filter input.
+  // Reset filter whenever the cluster changes
+  useEffect(() => {
+    setFilter("");
+  }, [selectedNode?.id]);
+
+  if (!selectedNode) return null;
+  const isSuper = selectedNode.type === "supertag";
   const subtagToSuper = taxonomyRef.current.subtagToSuper;
+
   const clusterDocs = docs.filter((d) => {
-    if (selectedNode.type === "supertag") {
+    if (isSuper) {
       for (const t of d.tags) {
         if (t === selectedNode.label) return true;
         if (subtagToSuper.get(t) === selectedNode.label) return true;
@@ -638,82 +644,130 @@ function TagDocumentList({
     }
     return d.tags.includes(selectedNode.label);
   });
+
   const filterLc = filter.toLowerCase();
   const filteredDocs = filter
-    ? clusterDocs.filter((d) => d.title.toLowerCase().includes(filterLc))
+    ? clusterDocs.filter(
+        (d) =>
+          d.title.toLowerCase().includes(filterLc) ||
+          (d.content_preview ?? "").toLowerCase().includes(filterLc),
+      )
     : clusterDocs;
 
-  // Group by source type for better readability
+  // Group by source type for visual structure
   const grouped = new Map<string, KnowledgeDoc[]>();
   for (const d of filteredDocs) {
-    const key = d.source_type;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(d);
+    if (!grouped.has(d.source_type)) grouped.set(d.source_type, []);
+    grouped.get(d.source_type)!.push(d);
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">
-          {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
-        </p>
-      </div>
-      {clusterDocs.length > 5 && (
-        <input
-          type="text"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter documents…"
-          className="w-full text-xs bg-accent/10 border border-border/30 rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/30"
-        />
-      )}
-      <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
-        {[...grouped.entries()].map(([type, typeDocs]) => (
-          <div key={type}>
-            <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider px-1 mb-1 flex items-center gap-1">
-              <span>{SOURCE_ICONS[type]}</span>
-              <span>{type}</span>
-              <span className="text-muted-foreground/30">({typeDocs.length})</span>
-            </p>
-            {typeDocs.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => {
-                  const n = nodesRef.current.find((x) => x.id === `doc:${d.id}`);
-                  if (n) {
-                    selectRef.current = n.id;
-                    setSelectedNode(n);
-                  } else {
-                    // Doc isn't materialised in the current view — synthesise a
-                    // lightweight node so the info panel can still open.
-                    const fake: SimNode = {
-                      id: `doc:${d.id}`,
-                      type: "doc",
-                      label: d.title,
-                      level: 2,
-                      wx: 0, wy: 0, wz: 0,
-                      vx: 0, vy: 0, vz: 0,
-                      ax: 0, ay: 0, az: 0,
-                      radius: 4,
-                      color: DOC_COLOR,
-                      doc: d,
-                    };
-                    selectRef.current = null;
-                    setSelectedNode(fake);
-                  }
-                }}
-                className="w-full text-left text-xs text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-md hover:bg-accent/15 transition-colors truncate block leading-snug"
-              >
-                {d.title}
-              </button>
-            ))}
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,48rem)] max-h-[85vh] p-0 overflow-hidden border border-border/40 bg-background/95 backdrop-blur-xl">
+        {/* Header band with a soft gold glow for tag identity */}
+        <div className="relative px-6 pt-6 pb-4 border-b border-border/30">
+          <div
+            className="absolute inset-0 pointer-events-none opacity-60"
+            style={{
+              background:
+                "radial-gradient(120% 80% at 50% -20%, rgba(255,200,40,0.18), transparent 60%)",
+            }}
+          />
+          <div className="relative flex items-start gap-3">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-300/30 to-amber-500/10 border border-amber-300/30">
+              <Sparkles size={16} className="text-amber-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-300/70 font-medium">
+                {isSuper ? "Domain" : "Topic"}
+              </p>
+              <DialogTitle className="text-2xl font-display font-bold text-foreground truncate">
+                {selectedNode.label}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-1">
+                {clusterDocs.length} knowledge point{clusterDocs.length !== 1 ? "s" : ""}
+                {filter && filteredDocs.length !== clusterDocs.length && (
+                  <span className="ml-1 text-muted-foreground/60">
+                    · {filteredDocs.length} match{filteredDocs.length !== 1 ? "es" : ""}
+                  </span>
+                )}
+              </DialogDescription>
+            </div>
           </div>
-        ))}
-        {filteredDocs.length === 0 && filter && (
-          <p className="text-xs text-muted-foreground/40 text-center py-2">No matches</p>
-        )}
-      </div>
-    </div>
+
+          {clusterDocs.length > 4 && (
+            <div className="relative mt-4">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+              />
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter knowledge points…"
+                className="w-full text-sm bg-accent/10 border border-border/40 rounded-lg pl-9 pr-3 py-2 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Body — knowledge point grid */}
+        <div className="px-6 py-5 overflow-y-auto max-h-[60vh] scrollbar-thin">
+          {filteredDocs.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-muted-foreground/60">
+                {filter ? "No matches for your filter." : "No knowledge points yet."}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {[...grouped.entries()].map(([type, typeDocs]) => (
+                <div key={type}>
+                  <div className="flex items-center gap-2 mb-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
+                    <span className="text-sm">{SOURCE_ICONS[type]}</span>
+                    <span>{type}</span>
+                    <span className="text-muted-foreground/40">· {typeDocs.length}</span>
+                    <div className="flex-1 h-px bg-border/30 ml-2" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {typeDocs.map((d) => (
+                      <Link
+                        key={d.id}
+                        to="/chat"
+                        search={{ doc: d.id }}
+                        onClick={onClose}
+                        className="group relative flex flex-col gap-1.5 p-3 rounded-xl border border-border/40 bg-accent/5 hover:bg-accent/15 hover:border-primary/40 transition-all hover:-translate-y-0.5"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="text-base leading-none mt-0.5">{SOURCE_ICONS[d.source_type]}</span>
+                          <p className="text-sm font-medium text-foreground line-clamp-2 flex-1 leading-snug group-hover:text-primary transition-colors">
+                            {d.title}
+                          </p>
+                        </div>
+                        {d.content_preview && (
+                          <p className="text-[11px] text-muted-foreground/70 line-clamp-2 leading-relaxed pl-6">
+                            {d.content_preview}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between pl-6 mt-0.5">
+                          <p className="text-[10px] text-muted-foreground/50">
+                            {formatDate(d.created_at)}
+                          </p>
+                          <span className="text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                            <MessageCircle size={10} /> Open
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1204,29 +1258,16 @@ export default function NebulaCanvas() {
         </div>
       )}
 
-      {/* Info panel */}
-      {selectedNode && (
+      {/* Doc info panel (side card) — only for individual knowledge points */}
+      {selectedNode && selectedNode.type === "doc" && (
         <div className="absolute top-3 right-3 left-3 sm:left-auto sm:w-72 glass rounded-xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{selectedNode.label}</p>
-              {selectedNode.type === "doc" && selectedNode.doc && (
+              {selectedNode.doc && (
                 <p className="text-xs text-muted-foreground mt-0.5 capitalize">
                   {SOURCE_ICONS[selectedNode.doc.source_type]} {selectedNode.doc.source_type}
                   {" · "}{selectedNode.doc.chunk_count} chunks
-                </p>
-              )}
-              {selectedNode.type === "supertag" && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Domain · {docs.filter(d => d.tags.some(t => {
-                    const parent = taxonomyRef.current.subtagToSuper.get(t);
-                    return t === selectedNode.label || parent === selectedNode.label;
-                  })).length} documents
-                </p>
-              )}
-              {selectedNode.type === "tag" && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Topic · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
                 </p>
               )}
             </div>
@@ -1235,7 +1276,7 @@ export default function NebulaCanvas() {
             </button>
           </div>
 
-          {selectedNode.type === "doc" && selectedNode.doc && (
+          {selectedNode.doc && (
             <>
               {selectedNode.doc.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -1261,19 +1302,21 @@ export default function NebulaCanvas() {
               </div>
             </>
           )}
-
-          {(selectedNode.type === "tag" || selectedNode.type === "supertag") && (
-            <TagDocumentList
-              docs={docs}
-              selectedNode={selectedNode}
-              taxonomyRef={taxonomyRef}
-              nodesRef={nodesRef}
-              selectRef={selectRef}
-              setSelectedNode={setSelectedNode}
-            />
-          )}
         </div>
       )}
+
+      {/* Central tag dialog — for topics & domains */}
+      <TagDialog
+        open={!!selectedNode && (selectedNode.type === "tag" || selectedNode.type === "supertag")}
+        onClose={() => {
+          selectRef.current = null;
+          setSelectedNode(null);
+          if (zoomedClusterRef.current) zoomOut();
+        }}
+        selectedNode={selectedNode && (selectedNode.type === "tag" || selectedNode.type === "supertag") ? selectedNode : null}
+        docs={docs}
+        taxonomyRef={taxonomyRef}
+      />
     </div>
   );
 }
