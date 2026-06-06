@@ -198,7 +198,7 @@ function buildGraph3D(
     const y = 1 - t * 2;
     const r = Math.sqrt(Math.max(0, 1 - y * y));
     const ang = phi_g * i;
-    const rad = sR * 0.35;
+    const rad = sR * 0.48;
     const id = `supertag:${st}`;
     nodeIds.set(st, id);
     const node: SimNode = {
@@ -214,7 +214,7 @@ function buildGraph3D(
   // Connect supertags to each other weakly (spread them apart)
   for (let i = 0; i < superArr.length; i++) {
     for (let j = i + 1; j < superArr.length; j++) {
-      addEdge(nodeIds.get(superArr[i])!, nodeIds.get(superArr[j])!, sR * 0.9, false);
+      addEdge(nodeIds.get(superArr[i])!, nodeIds.get(superArr[j])!, sR * 1.15, false);
     }
   }
 
@@ -227,7 +227,7 @@ function buildGraph3D(
     const parentId = nodeIds.get(parentName);
     const parentNode = parentId ? nodeById.get(parentId) ?? null : null;
     const offset = phi_g * i;
-    const spread = sR * 0.2;
+    const spread = sR * 0.30;
     const px = parentNode ? parentNode.wx : 0;
     const py = parentNode ? parentNode.wy : 0;
     const pz = parentNode ? parentNode.wz : 0;
@@ -246,7 +246,7 @@ function buildGraph3D(
     nodeById.set(id, node);
 
     // Strong edge to parent supertag
-    if (parentId) addEdge(id, parentId, sR * 0.25, true);
+    if (parentId) addEdge(id, parentId, sR * 0.35, true);
   });
 
   orphanArr.forEach((tag, i) => {
@@ -254,7 +254,7 @@ function buildGraph3D(
     const y = 1 - t * 2;
     const r = Math.sqrt(Math.max(0, 1 - y * y));
     const ang = phi_g * (i + allSubtags.length);
-    const rad = sR * 0.5;
+    const rad = sR * 0.65;
 
     const id = `tag:${tag}`;
     nodeIds.set(tag, id);
