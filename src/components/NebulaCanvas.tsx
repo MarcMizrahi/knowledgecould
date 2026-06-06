@@ -236,7 +236,7 @@ function buildGraph3D(
       id, type: "supertag", label: st, level: 0,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 12, color: SUPERTAG_COLOR,
+      radius: 12, color: colorFromLabel(st, true),
     };
     nodes.push(node);
     nodeById.set(id, node);
@@ -271,7 +271,7 @@ function buildGraph3D(
       wy: py + Math.sin(offset * 0.7) * spread * 0.5,
       wz: pz + Math.sin(offset) * spread,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 7, color: TAG_COLOR,
+      radius: 7, color: colorFromLabel(tag, false),
     };
     nodes.push(node);
     nodeById.set(id, node);
@@ -293,7 +293,7 @@ function buildGraph3D(
       id, type: "tag", label: tag, level: 1,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 7, color: TAG_COLOR,
+      radius: 7, color: colorFromLabel(tag, false),
     };
     nodes.push(node);
     nodeById.set(id, node);
