@@ -596,14 +596,47 @@ function paint3D(
     // Labels: always show for supertags, show for tags, show for active/linked docs
     if (isTagLike || active || linked) {
       const txt = n.label.length > 24 ? n.label.slice(0, 22) + "…" : n.label;
-      const fs  = isSuperTag ? 13 : isTag ? 10 : 9;
-      ctx.font      = isSuperTag ? `bold ${fs}px system-ui,sans-serif`
+      const fs  = isSuperTag ? 15 : isTag ? 12 : 10;
+      ctx.font      = isSuperTag ? `700 ${fs}px system-ui,sans-serif`
                      : isTag ? `600 ${fs}px system-ui,sans-serif`
-                     : `${fs}px system-ui,sans-serif`;
+                     : `500 ${fs}px system-ui,sans-serif`;
       ctx.textAlign = "center";
-      const labelOpa = active ? 1 : isSuperTag ? 0.95 : linked ? 0.9 : 0.8;
-      ctx.fillStyle = `rgba(${r},${g},${b},${labelOpa * opa})`;
-      ctx.fillText(txt, sx, sy + rad + (isSuperTag ? 16 : 13));
+      ctx.textBaseline = "middle";
+      const labelOpa = active ? 1 : isSuperTag ? 1 : linked ? 0.95 : 0.9;
+      const ty = sy + rad + (isSuperTag ? 18 : isTag ? 15 : 13);
+      // Pill background for readability
+      if (isTagLike) {
+        const padX = isSuperTag ? 8 : 6;
+        const padY = isSuperTag ? 4 : 3;
+        const tw = ctx.measureText(txt).width;
+        const bx = sx - tw / 2 - padX;
+        const by = ty - fs / 2 - padY;
+        const bw = tw + padX * 2;
+        const bh = fs + padY * 2;
+        const rr = bh / 2;
+        ctx.beginPath();
+        ctx.moveTo(bx + rr, by);
+        ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
+        ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
+        ctx.arcTo(bx, by + bh, bx, by, rr);
+        ctx.arcTo(bx, by, bx + bw, by, rr);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(8,6,20,${0.72 * (0.6 + 0.4 * opa)})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${r},${g},${b},${0.45 * opa})`;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      } else {
+        // Subtle shadow for doc labels
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowBlur = 4;
+      }
+      ctx.fillStyle = isTagLike
+        ? `rgba(255,245,210,${labelOpa})`
+        : `rgba(${r},${g},${b},${labelOpa * opa})`;
+      ctx.fillText(txt, sx, ty);
+      ctx.shadowBlur = 0;
+      ctx.textBaseline = "alphabetic";
     }
   }
 }
