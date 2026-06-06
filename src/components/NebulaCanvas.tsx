@@ -11,6 +11,37 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 const DOC_COLOR: [number, number, number] = [96, 165, 250];
 const SUPERTAG_COLOR: [number, number, number] = [255, 200, 40]; // bright gold for domains
 const TAG_COLOR: [number, number, number] = [251, 191, 36];       // gold for sub-topics
+
+// Deterministic vibrant color from a label string. Uses HSL so every
+// topic gets its own hue while keeping saturation/lightness consistent
+// with the nebula aesthetic.
+function hashString(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+function colorFromLabel(label: string, isSuper: boolean): [number, number, number] {
+  const hue = hashString(label) % 360;
+  // Supertags brighter & more saturated; subtags slightly softer
+  const sat = isSuper ? 0.85 : 0.75;
+  const lit = isSuper ? 0.62 : 0.66;
+  return hslToRgb(hue, sat, lit);
+}
+export function tagCssColor(label: string, isSuper = false, alpha = 1): string {
+  const [r, g, b] = colorFromLabel(label, isSuper);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
 
 // ── Auto-derived topic hierarchy ──────────────────────────────────────────────
