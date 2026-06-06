@@ -742,6 +742,13 @@ export default function NebulaCanvas() {
   const zoomTargetRef = useRef<{ scale: number; panX: number; panY: number } | null>(null);
   const zoomedClusterRef = useRef<string | null>(null); // supertag label currently zoomed into
   const expandedRef = useRef<string | null>(null); // supertag whose docs are materialised
+  // Cache built graphs by expansion key so re-opening a cluster restores its
+  // nodes (with their previously-evolved positions) instantly. Invalidated
+  // whenever the doc list or sR changes.
+  const clusterCacheRef = useRef<
+    Map<string, { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string>; sR: number }>
+  >(new Map());
+  const cacheDocsKeyRef = useRef<string>("");
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
   const [docs, setDocs]       = useState<KnowledgeDoc[]>([]);
@@ -789,16 +796,39 @@ export default function NebulaCanvas() {
     const baseScale = targetFill / (sR * 1.35);
     scaleRef.current = baseScale;
     baseScaleRef.current = baseScale;
-    const { nodes, edges, subtagToSuper: st } = buildGraph3D(
-      docsRef.current,
-      sR,
-      expandedRef.current,
-    );
-    // Scale down node radii on mobile for less overlap
-    if (isMobile) {
-      for (const n of nodes) {
-        n.radius = n.radius * 0.75;
+
+    // Invalidate the cluster cache if the doc set changed.
+    const docsKey = `${docsRef.current.length}:${docsRef.current.map(d => d.id).join(",")}`;
+    if (cacheDocsKeyRef.current !== docsKey) {
+      clusterCacheRef.current.clear();
+      cacheDocsKeyRef.current = docsKey;
+    }
+
+    const cacheKey = expandedRef.current ?? "__overview__";
+    let cached = clusterCacheRef.current.get(cacheKey);
+    // Drop stale entries if sR (viewport/doc growth) changed.
+    if (cached && cached.sR !== sR) {
+      clusterCacheRef.current.clear();
+      cached = undefined;
+    }
+
+    let nodes: SimNode[];
+    let edges: SimEdge[];
+    let st: Map<string, string>;
+    if (cached) {
+      nodes = cached.nodes;
+      edges = cached.edges;
+      st = cached.subtagToSuper;
+    } else {
+      const built = buildGraph3D(docsRef.current, sR, expandedRef.current);
+      nodes = built.nodes;
+      edges = built.edges;
+      st = built.subtagToSuper;
+      // Scale down node radii on mobile for less overlap
+      if (isMobile) {
+        for (const n of nodes) n.radius = n.radius * 0.75;
       }
+      clusterCacheRef.current.set(cacheKey, { nodes, edges, subtagToSuper: st, sR });
     }
     nodesRef.current = nodes;
     edgesRef.current = edges;
