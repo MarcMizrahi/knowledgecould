@@ -1,4 +1,5 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Nav from "@/components/Nav";
 import appCss from "../styles.css?url";
 
@@ -26,7 +27,7 @@ function NotFoundComponent() {
   );
 }
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -67,12 +68,13 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       <Nav />
       <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         <Outlet />
       </main>
-    </>
+    </QueryClientProvider>
   );
 }
