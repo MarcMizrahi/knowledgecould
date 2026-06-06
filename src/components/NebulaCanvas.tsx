@@ -155,7 +155,11 @@ interface Interaction {
 
 // ── Graph ─────────────────────────────────────────────────────────────────────
 
-function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string> } {
+function buildGraph3D(
+  docs: KnowledgeDoc[],
+  sR: number,
+  expandedSupertag: string | null = null,
+): { nodes: SimNode[]; edges: SimEdge[]; subtagToSuper: Map<string, string> } {
   const nodes: SimNode[] = [];
   const edgeSet = new Set<string>();
   const edges: SimEdge[] = [];
@@ -173,6 +177,16 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
 
   // 1. Auto-derive the topic hierarchy from tag co-occurrence
   const { supertagNames, subtagToSuper, orphanTags } = deriveTaxonomy(docs);
+
+  // Decide which docs (stars) to materialise as nodes. By default we render
+  // only the topic skeleton (supertags + tags). When the user dives into a
+  // supertag cluster we materialise just its docs. This keeps the working
+  // set small for very large libraries.
+  const visibleDocs: KnowledgeDoc[] = expandedSupertag
+    ? docs.filter(d =>
+        d.tags.some(t => t === expandedSupertag || subtagToSuper.get(t) === expandedSupertag),
+      )
+    : [];
 
   const nodeIds = new Map<string, string>(); // tag/supertag name → node id
 
@@ -254,8 +268,7 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   });
 
   // 4. Create document nodes (level 2) — small blue, near their most specific tag
-  const N = Math.max(docs.length, 1);
-  docs.forEach((doc, i) => {
+  visibleDocs.forEach((doc, i) => {
     // Find the most specific tag this doc has (prefer subtag over supertag)
     let bestTagId: string | null = null;
     let bestNode: SimNode | null = null;
@@ -304,14 +317,14 @@ function buildGraph3D(docs: KnowledgeDoc[], sR: number): { nodes: SimNode[]; edg
   // docs the original loop produced tens of thousands of weak edges, which
   // dominated both physics and the renderer. Scale the window down as the
   // graph grows so the visual density stays roughly constant.
-  const crossWindow = docs.length > 400 ? 6 : docs.length > 150 ? 12 : 24;
-  for (let i = 0; i < docs.length; i++) {
-    const a = docs[i];
+  const crossWindow = visibleDocs.length > 400 ? 6 : visibleDocs.length > 150 ? 12 : 24;
+  for (let i = 0; i < visibleDocs.length; i++) {
+    const a = visibleDocs[i];
     if (!a.tags.length) continue;
     const aTags = new Set(a.tags);
-    const limit = Math.min(docs.length, i + 1 + crossWindow);
+    const limit = Math.min(visibleDocs.length, i + 1 + crossWindow);
     for (let j = i + 1; j < limit; j++) {
-      const b = docs[j];
+      const b = visibleDocs[j];
       let shares = false;
       for (let k = 0; k < b.tags.length; k++) {
         if (aTags.has(b.tags[k])) { shares = true; break; }
@@ -670,6 +683,23 @@ function TagDocumentList({
                   if (n) {
                     selectRef.current = n.id;
                     setSelectedNode(n);
+                  } else {
+                    // Doc isn't materialised in the current view — synthesise a
+                    // lightweight node so the info panel can still open.
+                    const fake: SimNode = {
+                      id: `doc:${d.id}`,
+                      type: "doc",
+                      label: d.title,
+                      level: 2,
+                      wx: 0, wy: 0, wz: 0,
+                      vx: 0, vy: 0, vz: 0,
+                      ax: 0, ay: 0, az: 0,
+                      radius: 4,
+                      color: DOC_COLOR,
+                      doc: d,
+                    };
+                    selectRef.current = null;
+                    setSelectedNode(fake);
                   }
                 }}
                 className="w-full text-left text-xs text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-md hover:bg-accent/15 transition-colors truncate block leading-snug"
@@ -711,6 +741,7 @@ export default function NebulaCanvas() {
   // Zoom-to-cluster animation target
   const zoomTargetRef = useRef<{ scale: number; panX: number; panY: number } | null>(null);
   const zoomedClusterRef = useRef<string | null>(null); // supertag label currently zoomed into
+  const expandedRef = useRef<string | null>(null); // supertag whose docs are materialised
 
   const [selectedNode, setSelectedNode] = useState<SimNode | null>(null);
   const [docs, setDocs]       = useState<KnowledgeDoc[]>([]);
@@ -758,7 +789,11 @@ export default function NebulaCanvas() {
     const baseScale = targetFill / (sR * 1.35);
     scaleRef.current = baseScale;
     baseScaleRef.current = baseScale;
-    const { nodes, edges, subtagToSuper: st } = buildGraph3D(docsRef.current, sR);
+    const { nodes, edges, subtagToSuper: st } = buildGraph3D(
+      docsRef.current,
+      sR,
+      expandedRef.current,
+    );
     // Scale down node radii on mobile for less overlap
     if (isMobile) {
       for (const n of nodes) {
@@ -959,10 +994,20 @@ export default function NebulaCanvas() {
     if (!canvas) return;
     const w = canvas.offsetWidth, h = canvas.offsetHeight;
 
+    // Materialise this cluster's doc nodes, then re-find the (possibly new)
+    // supertag node by label since rebuild creates fresh objects.
+    expandedRef.current = supertagNode.label;
+    rebuild();
+    const freshSuper = nodesRef.current.find(
+      n => n.type === "supertag" && n.label === supertagNode.label,
+    ) ?? supertagNode;
+    selectRef.current = freshSuper.id;
+    setSelectedNode(freshSuper);
+
     // Find all nodes in this cluster (the supertag + its subtags + their docs)
-    const label = supertagNode.label;
+    const label = freshSuper.label;
     const clusterNodes = nodesRef.current.filter(n => {
-      if (n.id === supertagNode.id) return true;
+      if (n.id === freshSuper.id) return true;
       if (n.type === "tag" && taxonomyRef.current.subtagToSuper.get(n.label) === label) return true;
       if (n.type === "doc" && n.doc?.tags.some(t => t === label || taxonomyRef.current.subtagToSuper.get(t) === label)) return true;
       return false;
@@ -994,7 +1039,7 @@ export default function NebulaCanvas() {
     };
     zoomedClusterRef.current = label;
     setZoomed(true);
-  }, []);
+  }, [rebuild]);
 
   const zoomOut = useCallback(() => {
     zoomTargetRef.current = {
@@ -1003,8 +1048,18 @@ export default function NebulaCanvas() {
       panY: 0,
     };
     zoomedClusterRef.current = null;
+    // Collapse docs back into the skeleton view to keep the working set small.
+    if (expandedRef.current) {
+      expandedRef.current = null;
+      rebuild();
+      // Preserve a meaningful selection if it referred to a removed doc node.
+      if (selectRef.current?.startsWith("doc:")) {
+        selectRef.current = null;
+        setSelectedNode(null);
+      }
+    }
     setZoomed(false);
-  }, []);
+  }, [rebuild]);
 
   const onPointerUp = useCallback(() => {
     holdingTagRef.current = false;
@@ -1021,9 +1076,7 @@ export default function NebulaCanvas() {
           selectRef.current = newId;
           setSelectedNode(newId ? node : null);
         } else {
-          // Zoom into the cluster
-          selectRef.current = id;
-          setSelectedNode(node);
+          // Zoom into the cluster (also materialises its docs)
           zoomToCluster(node);
         }
       } else {
