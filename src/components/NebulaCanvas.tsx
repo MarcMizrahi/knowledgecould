@@ -683,6 +683,23 @@ function TagDocumentList({
                   if (n) {
                     selectRef.current = n.id;
                     setSelectedNode(n);
+                  } else {
+                    // Doc isn't materialised in the current view — synthesise a
+                    // lightweight node so the info panel can still open.
+                    const fake: SimNode = {
+                      id: `doc:${d.id}`,
+                      type: "doc",
+                      label: d.title,
+                      level: 2,
+                      wx: 0, wy: 0, wz: 0,
+                      vx: 0, vy: 0, vz: 0,
+                      ax: 0, ay: 0, az: 0,
+                      radius: 4,
+                      color: DOC_COLOR,
+                      doc: d,
+                    };
+                    selectRef.current = null;
+                    setSelectedNode(fake);
                   }
                 }}
                 className="w-full text-left text-xs text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-md hover:bg-accent/15 transition-colors truncate block leading-snug"
