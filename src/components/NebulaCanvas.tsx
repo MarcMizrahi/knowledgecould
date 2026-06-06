@@ -784,13 +784,12 @@ function TagDialog({
                 boxShadow: `0 0 24px rgba(${tagRgb},0.35)`,
               }}
             >
-              <Sparkles size={16} style={{ color: `rgb(${tagRgb})` }} />
-              {/* Sparkles color is overridden below via accessible variant */}
+              <Sparkles size={16} style={{ color: `rgb(${accessibleRgb})` }} />
             </div>
             <div className="flex-1 min-w-0">
               <p
                 className="text-[10px] uppercase tracking-[0.2em] font-medium"
-                style={{ color: `rgba(${tagRgb},0.85)` }}
+                style={{ color: `rgb(${accessibleRgb})` }}
               >
                 {isSuper ? "Domain" : "Topic"}
               </p>
