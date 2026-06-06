@@ -11,6 +11,37 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 const DOC_COLOR: [number, number, number] = [96, 165, 250];
 const SUPERTAG_COLOR: [number, number, number] = [255, 200, 40]; // bright gold for domains
 const TAG_COLOR: [number, number, number] = [251, 191, 36];       // gold for sub-topics
+
+// Deterministic vibrant color from a label string. Uses HSL so every
+// topic gets its own hue while keeping saturation/lightness consistent
+// with the nebula aesthetic.
+function hashString(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+function colorFromLabel(label: string, isSuper: boolean): [number, number, number] {
+  const hue = hashString(label) % 360;
+  // Supertags brighter & more saturated; subtags slightly softer
+  const sat = isSuper ? 0.85 : 0.75;
+  const lit = isSuper ? 0.62 : 0.66;
+  return hslToRgb(hue, sat, lit);
+}
+export function tagCssColor(label: string, isSuper = false, alpha = 1): string {
+  const [r, g, b] = colorFromLabel(label, isSuper);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 const DEF_COLOR: [number, number, number] = [96, 165, 250];
 
 // ── Auto-derived topic hierarchy ──────────────────────────────────────────────
@@ -205,7 +236,7 @@ function buildGraph3D(
       id, type: "supertag", label: st, level: 0,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 12, color: SUPERTAG_COLOR,
+      radius: 12, color: colorFromLabel(st, true),
     };
     nodes.push(node);
     nodeById.set(id, node);
@@ -240,7 +271,7 @@ function buildGraph3D(
       wy: py + Math.sin(offset * 0.7) * spread * 0.5,
       wz: pz + Math.sin(offset) * spread,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 7, color: TAG_COLOR,
+      radius: 7, color: colorFromLabel(tag, false),
     };
     nodes.push(node);
     nodeById.set(id, node);
@@ -262,7 +293,7 @@ function buildGraph3D(
       id, type: "tag", label: tag, level: 1,
       wx: r * Math.cos(ang) * rad, wy: y * rad, wz: r * Math.sin(ang) * rad,
       vx: 0, vy: 0, vz: 0, ax: 0, ay: 0, az: 0,
-      radius: 7, color: TAG_COLOR,
+      radius: 7, color: colorFromLabel(tag, false),
     };
     nodes.push(node);
     nodeById.set(id, node);
@@ -633,6 +664,8 @@ function TagDialog({
   if (!selectedNode) return null;
   const isSuper = selectedNode.type === "supertag";
   const subtagToSuper = taxonomyRef.current.subtagToSuper;
+  const [tr, tg, tb] = colorFromLabel(selectedNode.label, isSuper);
+  const tagRgb = `${tr},${tg},${tb}`;
 
   const clusterDocs = docs.filter((d) => {
     if (isSuper) {
@@ -665,20 +698,32 @@ function TagDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,48rem)] max-h-[85vh] p-0 overflow-hidden border border-border/40 bg-background/95 backdrop-blur-xl">
         {/* Header band with a soft gold glow for tag identity */}
-        <div className="relative px-6 pt-6 pb-4 border-b border-border/30">
+        <div
+          className="relative px-6 pt-6 pb-4 border-b"
+          style={{ borderColor: `rgba(${tagRgb},0.25)` }}
+        >
           <div
             className="absolute inset-0 pointer-events-none opacity-60"
             style={{
-              background:
-                "radial-gradient(120% 80% at 50% -20%, rgba(255,200,40,0.18), transparent 60%)",
+              background: `radial-gradient(120% 80% at 50% -20%, rgba(${tagRgb},0.22), transparent 60%)`,
             }}
           />
           <div className="relative flex items-start gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-300/30 to-amber-500/10 border border-amber-300/30">
-              <Sparkles size={16} className="text-amber-300" />
+            <div
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border"
+              style={{
+                background: `linear-gradient(135deg, rgba(${tagRgb},0.32), rgba(${tagRgb},0.08))`,
+                borderColor: `rgba(${tagRgb},0.4)`,
+                boxShadow: `0 0 24px rgba(${tagRgb},0.35)`,
+              }}
+            >
+              <Sparkles size={16} style={{ color: `rgb(${tagRgb})` }} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-300/70 font-medium">
+              <p
+                className="text-[10px] uppercase tracking-[0.2em] font-medium"
+                style={{ color: `rgba(${tagRgb},0.85)` }}
+              >
                 {isSuper ? "Domain" : "Topic"}
               </p>
               <DialogTitle className="text-2xl font-display font-bold text-foreground truncate">
