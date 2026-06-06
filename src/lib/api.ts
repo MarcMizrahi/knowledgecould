@@ -102,6 +102,26 @@ export async function deleteDocument(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function getDocument(id: string): Promise<KnowledgeDoc & { content: string | null }> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id: data.id,
+    title: data.title,
+    source_type: data.source_type as SourceType,
+    source_path: data.source_path,
+    content_preview: data.content_preview,
+    tags: data.tags || [],
+    chunk_count: data.chunk_count || 0,
+    created_at: data.created_at,
+    content: data.content ?? null,
+  };
+}
+
 export async function ingestNote(
   title: string,
   content: string,
