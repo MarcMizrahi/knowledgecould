@@ -1258,29 +1258,16 @@ export default function NebulaCanvas() {
         </div>
       )}
 
-      {/* Info panel */}
-      {selectedNode && (
+      {/* Doc info panel (side card) — only for individual knowledge points */}
+      {selectedNode && selectedNode.type === "doc" && (
         <div className="absolute top-3 right-3 left-3 sm:left-auto sm:w-72 glass rounded-xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{selectedNode.label}</p>
-              {selectedNode.type === "doc" && selectedNode.doc && (
+              {selectedNode.doc && (
                 <p className="text-xs text-muted-foreground mt-0.5 capitalize">
                   {SOURCE_ICONS[selectedNode.doc.source_type]} {selectedNode.doc.source_type}
                   {" · "}{selectedNode.doc.chunk_count} chunks
-                </p>
-              )}
-              {selectedNode.type === "supertag" && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Domain · {docs.filter(d => d.tags.some(t => {
-                    const parent = taxonomyRef.current.subtagToSuper.get(t);
-                    return t === selectedNode.label || parent === selectedNode.label;
-                  })).length} documents
-                </p>
-              )}
-              {selectedNode.type === "tag" && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Topic · {docs.filter(d => d.tags.includes(selectedNode.label)).length} documents
                 </p>
               )}
             </div>
@@ -1289,7 +1276,7 @@ export default function NebulaCanvas() {
             </button>
           </div>
 
-          {selectedNode.type === "doc" && selectedNode.doc && (
+          {selectedNode.doc && (
             <>
               {selectedNode.doc.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -1315,19 +1302,21 @@ export default function NebulaCanvas() {
               </div>
             </>
           )}
-
-          {(selectedNode.type === "tag" || selectedNode.type === "supertag") && (
-            <TagDocumentList
-              docs={docs}
-              selectedNode={selectedNode}
-              taxonomyRef={taxonomyRef}
-              nodesRef={nodesRef}
-              selectRef={selectRef}
-              setSelectedNode={setSelectedNode}
-            />
-          )}
         </div>
       )}
+
+      {/* Central tag dialog — for topics & domains */}
+      <TagDialog
+        open={!!selectedNode && (selectedNode.type === "tag" || selectedNode.type === "supertag")}
+        onClose={() => {
+          selectRef.current = null;
+          setSelectedNode(null);
+          if (zoomedClusterRef.current) zoomOut();
+        }}
+        selectedNode={selectedNode && (selectedNode.type === "tag" || selectedNode.type === "supertag") ? selectedNode : null}
+        docs={docs}
+        taxonomyRef={taxonomyRef}
+      />
     </div>
   );
 }
